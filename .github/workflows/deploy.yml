@@ -1,0 +1,48 @@
+name: Deploy to GitHub Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    env:
+      FIREBASE_CONFIG: ${{ secrets.FIREBASE_CONFIG }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - name: Inject Firebase config
+        if: ${{ env.FIREBASE_CONFIG != '' }}
+        run: node -e "require('fs').writeFileSync('src/environments/environment.ts','export const environment = { firebase: '+process.env.FIREBASE_CONFIG+' };\n')"
+      - run: npm run build -- --configuration production --base-href /${{ github.event.repository.name }}/
+      - name: SPA fallback for Pages
+        run: cp dist/arte-en-vivo/browser/index.html dist/arte-en-vivo/browser/404.html
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist/arte-en-vivo/browser
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

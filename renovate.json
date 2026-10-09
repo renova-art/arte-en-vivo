@@ -1,0 +1,24 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": ["config:recommended", ":semanticCommits", ":semanticCommitTypeAll(chore)"],
+  "timezone": "Europe/Madrid",
+  "schedule": ["before 6am every day"],
+  "prConcurrentLimit": 0,
+  "prHourlyLimit": 0,
+  "rangeStrategy": "bump",
+  "automerge": true,
+  "automergeType": "pr",
+  "platformAutomerge": true,
+  "packageRules": [
+    {
+      "description": "Angular se actualiza en bloque",
+      "groupName": "angular",
+      "matchPackageNames": ["@angular/**", "@angular-devkit/**", "ng-packagr", "zone.js"]
+    },
+    {
+      "description": "Angular 22 exige TypeScript >=6.0 <6.1",
+      "matchPackageNames": ["typescript"],
+      "allowedVersions": "<6.1.0"
+    }
+  ]
+}

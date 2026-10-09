@@ -1,0 +1,28 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Presupuestos: creación pública (con estado inicial forzado); resto solo admin.
+    match /quotes/{quoteId} {
+      allow create: if request.resource.data.status == 'pendiente'
+                    && request.resource.data.travelCost == 0
+                    && request.resource.data.client.termsAccepted == true
+                    && request.resource.data.client.privacyAccepted == true;
+      allow read, update, delete: if request.auth != null;
+    }
+
+    // Configuración: lectura pública, escritura solo admin.
+    match /settings/{docId} {
+      allow read: if true;
+      allow write: if request.auth != null;
+    }
+
+    // Contador de numeración por año: el formulario público solo puede incrementarlo.
+    match /counters/{year} {
+      allow read: if true;
+      allow create: if request.resource.data.value is int && request.resource.data.value >= 1;
+      allow update: if request.resource.data.value is int
+                    && request.resource.data.value > resource.data.value;
+    }
+  }
+}
