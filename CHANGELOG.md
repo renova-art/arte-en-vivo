@@ -1,3 +1,10 @@
+## [1.0.3](https://github.com/renova-art/arte-en-vivo/compare/v1.0.2...v1.0.3) (2026-10-09)
+
+
+### Bug Fixes
+
+* restringe el admin, separa environment.ts y añade nuevo favicon ([cad55cb](https://github.com/renova-art/arte-en-vivo/commit/cad55cb7489dc647d7aca891f26ed0da19dc9e50))
+
 ## [1.0.2](https://github.com/renova-art/arte-en-vivo/compare/v1.0.1...v1.0.2) (2026-10-09)
 
 
