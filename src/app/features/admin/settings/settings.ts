@@ -3,6 +3,7 @@ import { FormArray, FormBuilder, FormControl, ReactiveFormsModule, Validators } 
 import { RouterLink } from '@angular/router';
 import { AppSettings, BlockedDate, BlockedRange, ProviderPerson } from '../../../core/models';
 import { DatePicker } from '../../../shared/components/date-picker';
+import { defaultSignatureNames } from '../../../core/config/signature';
 import { MAX_BLOCK_RANGE_DAYS } from '../../../core/config/defaults';
 import { DateBlockedError, FirebaseService, daysBetween } from '../../../core/services/firebase.service';
 
@@ -184,6 +185,19 @@ import { DateBlockedError, FirebaseService, daysBetween } from '../../../core/se
           <button type="button" class="btn-secondary" (click)="addTier()">+ Añadir tramo</button>
         </section>
 
+        <section class="card grid gap-4 sm:grid-cols-2" formGroupName="signature">
+          <h2 class="text-xl font-semibold sm:col-span-2">Firma del PDF</h2>
+          <div>
+            <label class="label" for="sg-greeting">Despedida</label>
+            <input id="sg-greeting" class="input" formControlName="greeting" placeholder="Atentamente," />
+          </div>
+          <div>
+            <label class="label" for="sg-names">Nombres</label>
+            <input id="sg-names" class="input" formControlName="names" [placeholder]="signaturePlaceholder()" />
+          </div>
+          <p class="text-xs text-ink-500 sm:col-span-2">Aparece al final del presupuesto, a la izquierda. Si dejas los nombres vacíos se usan los de pila de las proveedoras ({{ signaturePlaceholder() }}).</p>
+        </section>
+
         <section class="card">
           <h2 class="text-xl font-semibold">Observaciones del PDF</h2>
           <textarea rows="4" class="input mt-3" formControlName="pdfObservations"></textarea>
@@ -235,6 +249,10 @@ export class Settings {
       percent: [10, [Validators.required, Validators.min(0), Validators.max(100)]],
       days: [30, [Validators.required, Validators.min(1)]],
     }),
+    signature: this.fb.nonNullable.group({
+      greeting: ['Atentamente,'],
+      names: [''],
+    }),
     pdfObservations: [''],
   });
 
@@ -257,12 +275,18 @@ export class Settings {
         currentYear: s.currentYear,
         studio: s.studio,
         earlyBooking: s.earlyBooking,
+        signature: s.signature,
         pdfObservations: s.pdfObservations,
       });
       this.logo.set(s.logo ?? null);
       this.loadBlocks();
       this.loading.set(false);
     });
+  }
+
+  /** Nombres que se usarán en la firma si el campo está vacío. */
+  signaturePlaceholder(): string {
+    return defaultSignatureNames(this.providers.getRawValue() as ProviderPerson[]);
   }
 
   fmt(iso: string): string {

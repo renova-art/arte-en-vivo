@@ -82,6 +82,7 @@ export interface AppSettings {
   providers: ProviderPerson[]; // Las dos proveedoras
   pricingTiers: PricingTier[];
   earlyBooking: EarlyBookingDefaults;
+  signature: { greeting: string; names: string }; // Firma del PDF (names vacío = nombres de pila de las proveedoras)
   logo?: string;           // Data URL para el PDF (opcional, se guarda en settings/private)
   pdfObservations: string;   // Texto libre de observaciones legales o informativas
 }

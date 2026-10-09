@@ -76,6 +76,7 @@ export class FirebaseService {
         ...defaults,
         ...data,
         earlyBooking: { ...defaults.earlyBooking, ...data.earlyBooking },
+        signature: { ...defaults.signature, ...data.signature },
         studio: { ...defaults.studio, ...(legacy && { address: legacy.address, email: legacy.email }), ...data.studio },
         providers: providers.map(({ name, nif, cifNif, phone, bizum, bankAccount }: ProviderPerson & { cifNif?: string }) => ({ name, nif: nif ?? cifNif ?? '', phone, bizum: !!bizum, bankAccount: bankAccount ?? '' })),
         pricingTiers: data.pricingTiers?.length ? data.pricingTiers : DEFAULT_SETTINGS.pricingTiers,

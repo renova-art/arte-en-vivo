@@ -1,7 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed, inject, input, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
-import { DEFAULT_SETTINGS, EVENT_TYPE_LABELS } from '../../../core/config/defaults';
+import { DEFAULT_SETTINGS, DEPOSIT_PERCENT, EVENT_TYPE_LABELS } from '../../../core/config/defaults';
 import { AppSettings, EventDetails, EventType, Quote, QuoteLineItem, QuoteStatus } from '../../../core/models';
 import { DateBlockedError, FirebaseService } from '../../../core/services/firebase.service';
 import { PdfGeneratorService } from '../../../core/services/pdf-generator.service';
@@ -105,33 +105,26 @@ import { EuroCurrencyPipe } from '../../../shared/pipes/pipes';
                 <th class="px-2 py-2">Concepto</th>
                 <th class="w-24 px-2 py-2">Unidades</th>
                 <th class="w-32 px-2 py-2">Precio unit. (€)</th>
-                <th class="w-44 px-2 py-2">Descuento</th>
+                @if (early()) { <th class="w-24 px-2 py-2 text-center" title="El descuento por reserva temprana se aplica a este concepto">Reserva temprana</th> }
                 <th class="w-28 px-2 py-2 text-right">Importe</th>
                 <th class="w-10 px-2 py-2"></th>
               </tr>
             </thead>
             <tbody>
               @for (i of items(); track i.id) {
-                <tr class="border-t border-cream-200 align-top">
-                  <td class="px-2 py-2"><input class="input" aria-label="Concepto" [ngModel]="i.concept" (ngModelChange)="setItem(i.id, { concept: $event })" /></td>
-                  <td class="px-2 py-2"><input type="number" min="0" step="any" class="input" aria-label="Unidades" [ngModel]="i.units" (ngModelChange)="setItem(i.id, { units: +$event || 0 })" /></td>
-                  <td class="px-2 py-2"><input type="number" min="0" step="1" class="input" aria-label="Precio unitario" [ngModel]="i.unitPrice" (ngModelChange)="setItem(i.id, { unitPrice: +$event || 0 })" /></td>
-                  <td class="px-2 py-2">
-                    <div class="flex gap-1">
-                      <input type="number" min="0" step="1" class="input" aria-label="Descuento" [ngModel]="i.discount" (ngModelChange)="setItem(i.id, { discount: +$event || 0 })" />
-                      <select class="input !w-16 !px-2" aria-label="Tipo de descuento" [ngModel]="i.discountType" (ngModelChange)="setItem(i.id, { discountType: $event })">
-                        <option value="percent">%</option>
-                        <option value="amount">€</option>
-                      </select>
-                    </div>
-                  </td>
-                  <td class="px-2 py-3 text-right">
-                    @if (calc.lineDiscount(i) > 0) {
-                      <span class="block text-xs text-ink-500 line-through">{{ calc.lineGross(i) | euro }}</span>
-                    }
+                <tr class="border-t border-cream-200 align-middle">
+                  <td class="align-middle px-2 py-2"><input class="input" aria-label="Concepto" [ngModel]="i.concept" (ngModelChange)="setItem(i.id, { concept: $event })" /></td>
+                  <td class="align-middle px-2 py-2"><input type="number" min="0" step="any" class="input" aria-label="Unidades" [ngModel]="i.units" (ngModelChange)="setItem(i.id, { units: +$event || 0 })" /></td>
+                  <td class="align-middle px-2 py-2"><input type="number" min="0" step="1" class="input" aria-label="Precio unitario" [ngModel]="i.unitPrice" (ngModelChange)="setItem(i.id, { unitPrice: +$event || 0 })" /></td>
+                  @if (early()) {
+                    <td class="align-middle px-2 py-2 text-center">
+                      <input type="checkbox" class="h-4 w-4 accent-blush-400" aria-label="Aplicar descuento por reserva temprana a este concepto" [ngModel]="i.earlyDiscount" (ngModelChange)="setItem(i.id, { earlyDiscount: $event })" />
+                    </td>
+                  }
+                  <td class="align-middle px-2 py-2 text-right">
                     <strong>{{ calc.lineTotal(i) | euro }}</strong>
                   </td>
-                  <td class="px-2 py-2 text-right">
+                  <td class="align-middle px-2 py-2 text-right">
                     <button type="button" class="px-2 py-2 text-lg leading-none text-ink-500 hover:text-red-600" aria-label="Quitar concepto" (click)="removeItem(i.id)">×</button>
                   </td>
                 </tr>
@@ -145,9 +138,6 @@ import { EuroCurrencyPipe } from '../../../shared/pipes/pipes';
         <div class="mt-3 flex flex-wrap items-center justify-between gap-3 border-t border-cream-200 pt-3">
           <button type="button" class="text-xs text-ink-500 underline hover:text-ink-900" (click)="resetItems()">Restablecer conceptos desde el evento</button>
           <div class="text-right">
-            @if (discountTotal() > 0) {
-              <p class="text-xs text-ink-500">Descuentos aplicados: −{{ discountTotal() | euro }}</p>
-            }
             <p class="text-lg">Total: <strong class="font-serif text-2xl">{{ total() | euro }}</strong></p>
           </div>
         </div>
@@ -164,16 +154,38 @@ import { EuroCurrencyPipe } from '../../../shared/pipes/pipes';
                 <input id="eb-pct" type="number" min="0" max="100" step="1" class="input" [ngModel]="e.percent" (ngModelChange)="patchEarly({ percent: +$event || 0 })" />
               </div>
               <div>
-                <label class="label" for="eb-date">Reservando antes del</label>
+                <label class="label" for="eb-date">Válido hasta el (incluido)</label>
                 <app-date-picker inputId="eb-date" [ngModel]="e.deadline" (ngModelChange)="patchEarly({ deadline: $event })" />
               </div>
-              <p class="pb-2 text-right">
-                Precio con descuento:
-                <strong class="font-serif text-2xl">{{ earlyPrice() | euro }}</strong>
-                <span class="block text-xs text-ink-500">Ahorro de {{ total() - earlyPrice()! | euro }}</span>
+              <p class="pb-2 text-right text-sm">
+                Ahorro: <strong>{{ total() - earlyPrice()! | euro }}</strong>
+                <span class="block text-xs text-ink-500">Solo en los conceptos marcados en la tabla</span>
               </p>
             </div>
           }
+        </div>
+
+        <div class="mt-4 overflow-x-auto rounded-xl border border-cream-200">
+          <table class="w-full min-w-[520px] text-sm">
+            <thead class="bg-cream-100 text-xs uppercase text-ink-500">
+              <tr>
+                <th class="px-3 py-2 text-left">{{ early() ? 'Confirmación de la reserva' : 'Importes de pago' }}</th>
+                <th class="px-3 py-2 text-right">Total</th>
+                <th class="px-3 py-2 text-right">Reserva ({{ depositPct }} %)</th>
+                <th class="px-3 py-2 text-right">Resto ({{ 100 - depositPct }} %)</th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (row of paymentRows(); track row.label) {
+                <tr class="border-t border-cream-200">
+                  <td class="px-3 py-2">{{ row.label }}</td>
+                  <td class="px-3 py-2 text-right font-semibold">{{ row.amount | euro }}</td>
+                  <td class="px-3 py-2 text-right">{{ row.deposit | euro }}</td>
+                  <td class="px-3 py-2 text-right">{{ row.remainder | euro }}</td>
+                </tr>
+              }
+            </tbody>
+          </table>
         </div>
 
         <div class="mt-4 flex flex-wrap items-center justify-end gap-3 border-t border-cream-200 pt-4">
@@ -212,9 +224,18 @@ export class Detail {
   readonly total = computed(() => this.calc.itemsTotal(this.items()));
   readonly earlyPrice = computed(() => {
     const e = this.early();
-    return e ? this.calc.earlyBookingPrice(this.total(), e.percent) : null;
+    return e ? this.calc.earlyBookingPrice(this.items(), e.percent) : null;
   });
-  readonly discountTotal = computed(() => this.items().reduce((s, i) => s + this.calc.lineDiscount(i), 0));
+  readonly depositPct = DEPOSIT_PERCENT;
+  /** Cuánto se paga (reserva y resto) según se reserve dentro o fuera del plazo del descuento. */
+  readonly paymentRows = computed(() => {
+    const e = this.early();
+    const plan = this.calc.paymentPlan(this.items(), e ? e.percent : null);
+    return [
+      ...(e && plan.early ? [{ label: `Hasta el ${this.fmt(e.deadline)} (incluido)`, ...plan.early }] : []),
+      { label: e ? `A partir del ${this.fmt(this.dayAfter(e.deadline))}` : 'Total del presupuesto', ...plan.regular },
+    ];
+  });
   /** True si el formulario difiere de lo último guardado. */
   readonly dirty = computed(() => {
     const q = this.quote();
@@ -288,6 +309,16 @@ export class Detail {
     this.items.update((list) => list.map((i) => (i.id === 'service' && i.unitPrice === prevRate ? { ...i, unitPrice: newRate } : i)));
   }
 
+  fmt(iso: string): string {
+    const [y, m, d] = iso.split('-').map(Number);
+    return y ? new Date(y, m - 1, d).toLocaleDateString('es-ES', { day: 'numeric', month: 'long', year: 'numeric' }) : '—';
+  }
+
+  private dayAfter(iso: string): string {
+    const [y, m, d] = iso.split('-').map(Number);
+    return this.calc.earlyBookingDeadline(new Date(y, m - 1, d), 1);
+  }
+
   // ---- Descuento por reserva temprana ----
   toggleEarly(on: boolean) {
     const q = this.quote();
@@ -308,7 +339,7 @@ export class Detail {
   addItem() {
     this.items.update((list) => [
       ...list,
-      { id: crypto.randomUUID(), concept: '', units: 1, unitPrice: 0, discount: 0, discountType: 'percent' },
+      { id: crypto.randomUUID(), concept: '', units: 1, unitPrice: 0, earlyDiscount: false },
     ]);
   }
 
@@ -337,7 +368,7 @@ export class Detail {
       event: this.event(),
       lineItems: items,
       appliedHourlyRate: service?.unitPrice ?? q.appliedHourlyRate,
-      subtotalHours: service ? this.calc.lineGross(service) : q.subtotalHours,
+      subtotalHours: service ? this.calc.lineTotal(service) : q.subtotalHours,
       travelCost: travel ? this.calc.lineTotal(travel) : 0,
       totalAmount: this.calc.itemsTotal(items),
       status: this.status(),

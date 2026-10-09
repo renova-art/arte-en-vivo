@@ -26,6 +26,12 @@ export interface EarlyBookingDefaults {
   days: number;    // Días de validez desde la emisión del presupuesto
 }
 
+/** Firma que cierra el PDF: despedida y nombres (si 'names' está vacío se usan los nombres de pila de las proveedoras). */
+export interface SignatureSettings {
+  greeting: string;
+  names: string;
+}
+
 export interface AppSettings {
   initialQuoteNumber: number;
   currentYear: number;
@@ -33,6 +39,7 @@ export interface AppSettings {
   providers: ProviderPerson[]; // Las dos proveedoras
   pricingTiers: PricingTier[];
   earlyBooking: EarlyBookingDefaults;
+  signature: SignatureSettings;
   logo?: string; // Data URL (PNG/JPEG) para el PDF; solo en el documento privado
   pdfObservations: string;
 }
@@ -59,16 +66,13 @@ export interface EventDetails {
   description?: string;
 }
 
-export type DiscountType = 'percent' | 'amount';
-
-/** Línea de concepto de un presupuesto: unidades × precio unitario, con descuento opcional. */
+/** Línea de concepto de un presupuesto: unidades × precio unitario. */
 export interface QuoteLineItem {
   id: string;
   concept: string;
   units: number;
   unitPrice: number;
-  discount: number; // % (0-100) o € según discountType
-  discountType: DiscountType;
+  earlyDiscount?: boolean; // ¿Entra en el descuento por reserva temprana? (si falta: solo el servicio)
 }
 
 /** Fecha en la que no se aceptan nuevas solicitudes (documento público, sin datos de clientes). */

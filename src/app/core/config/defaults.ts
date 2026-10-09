@@ -13,6 +13,7 @@ export const MAX_BLOCK_RANGE_DAYS = 366;
 // Pon a true cuando haya fotos en el portafolio.
 export const SHOW_PORTFOLIO = false;
 
+export const DEPOSIT_PERCENT = 40; // Reserva; el resto (60 %) se paga antes del evento
 export const MIN_HOURS = 2;
 export const MAX_HOURS = 6;
 export const MAX_ILLUSTRATIONS_PER_HOUR = 10;
@@ -30,6 +31,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
     { name: 'Proveedora 2', nif: '00000001R', phone: '600 000 001', bizum: false, bankAccount: '' },
   ],
   earlyBooking: { percent: 10, days: 30 },
+  signature: { greeting: 'Atentamente,', names: '' },
   pricingTiers: [
     { minGuests: 0, maxGuests: 100, pricePerHour: 150 },
     { minGuests: 101, maxGuests: 150, pricePerHour: 160 },

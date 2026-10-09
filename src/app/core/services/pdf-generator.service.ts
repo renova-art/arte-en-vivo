@@ -1,16 +1,26 @@
 import { Injectable, inject } from '@angular/core';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
-import { EVENT_TYPE_LABELS } from '../config/defaults';
-import { AppSettings, ProviderPerson, Quote, QuoteLineItem } from '../models';
+import { DEPOSIT_PERCENT, EVENT_TYPE_LABELS } from '../config/defaults';
+import { AppSettings, ProviderPerson, Quote } from '../models';
+import { defaultSignatureNames } from '../config/signature';
 import { QuoteCalculatorService } from './quote-calculator.service';
 
 const ROSE: [number, number, number] = [228, 143, 134];
 const INK: [number, number, number] = [43, 38, 34];
 const MUTED: [number, number, number] = [107, 98, 89];
 
+/** Densidades del maquetado: se prueba la primera y, si el PDF pasa de una página, la siguiente (más compacta). */
+const DENSITIES = [
+  { pad: 1.8, planPad: 1.5, gap: 6.5, row: 4.2, font: 9, titleGap: 5.5 },
+  { pad: 1.4, planPad: 1.2, gap: 5.5, row: 3.9, font: 8.5, titleGap: 5 },
+  { pad: 1.1, planPad: 0.9, gap: 4.5, row: 3.6, font: 8, titleGap: 4.5 },
+];
+
 const eur = (n: number) =>
-  new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(n);
+  new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 })
+    .format(n)
+    .replace(/\u00A0/g, ' '); // el espacio duro de Intl se mide distinto en jsPDF y en los visores, y desalinea las columnas
 
 const fmtDate = (d: Date | string) =>
   new Date(d).toLocaleDateString('es-ES', { day: 'numeric', month: 'long', year: 'numeric' });
@@ -28,6 +38,21 @@ export class PdfGeneratorService {
     const url = URL.createObjectURL(this.build(quote, settings).output('blob'));
     window.open(url, '_blank');
     setTimeout(() => URL.revokeObjectURL(url), 60_000);
+  }
+
+  /** Firma sobria al pie, alineada a la izquierda: despedida y nombres en texto normal. */
+  private drawSignature(doc: jsPDF, M: number, y: number, settings: AppSettings, d: (typeof DENSITIES)[number]): void {
+    const greeting = settings.signature?.greeting?.trim() ?? '';
+    const names = settings.signature?.names?.trim() || defaultSignatureNames(settings.providers);
+    const lines = [greeting, names].filter(Boolean);
+    if (!lines.length) return;
+    const lineHeight = d.row + 0.8;
+    if (y + lineHeight * lines.length > doc.internal.pageSize.getHeight() - 10) {
+      doc.addPage();
+      y = 20;
+    }
+    doc.setFont('helvetica', 'normal').setFontSize(d.font + 1).setTextColor(...INK);
+    lines.forEach((line, i) => doc.text(line, M, y + lineHeight * i));
   }
 
   /** Dibuja el logo ajustado a la caja (sin deformarlo). Devuelve su tamaño o null si no se pudo usar. */
@@ -48,7 +73,18 @@ export class PdfGeneratorService {
     }
   }
 
+  /** Genera el PDF en una sola página: prueba cada densidad hasta que cabe. */
   private build(quote: Quote, settings: AppSettings): jsPDF {
+    let doc!: jsPDF;
+    for (let level = 0; level < DENSITIES.length; level++) {
+      doc = this.render(quote, settings, level);
+      if (doc.getNumberOfPages() === 1) break;
+    }
+    return doc;
+  }
+
+  private render(quote: Quote, settings: AppSettings, level: number): jsPDF {
+    const d = DENSITIES[level];
     const doc = new jsPDF({ unit: 'mm', format: 'a4' });
     doc.setProperties({ title: `Presupuesto ${quote.quoteNumber}` });
     const W = doc.internal.pageSize.getWidth();
@@ -100,7 +136,7 @@ export class PdfGeneratorService {
       provBottom = Math.max(provBottom, y);
     });
     doc.setDrawColor(228, 218, 205).setLineWidth(0.2).line(M, provBottom + 1, W - M, provBottom + 1);
-    const top = provBottom + 8;
+    const top = provBottom + d.gap;
 
     // Cliente y evento
     const e = quote.event;
@@ -112,14 +148,14 @@ export class PdfGeneratorService {
     const block = (title: string, rows: [string, string][], x: number, w: number): number => {
       doc.setFont('times', 'bold').setFontSize(12).setTextColor(...INK);
       doc.text(title, x, top);
-      doc.setFontSize(9);
-      let y = top + 6;
+      doc.setFontSize(d.font);
+      let y = top + d.titleGap;
       for (const [k, v] of rows) {
         doc.setFont('helvetica', 'bold').setTextColor(...MUTED).text(`${k}:`, x, y);
         doc.setFont('helvetica', 'normal').setTextColor(...INK);
         const lines = doc.splitTextToSize(v, w - 24);
         doc.text(lines, x + 24, y);
-        y += 5 * lines.length;
+        y += d.row * lines.length + 0.4;
       }
       return y;
     };
@@ -137,26 +173,23 @@ export class PdfGeneratorService {
       ['Duración', `${e.durationHours} horas`],
     ], M + half, half);
 
-    // Tabla de conceptos (unidades × precio, con descuentos por línea)
+    // Tabla de conceptos (unidades × precio)
     const items = this.calc.getLineItems(quote);
-    const hasDiscount = items.some((i) => this.calc.lineDiscount(i) > 0);
     const num = (n: number) => new Intl.NumberFormat('es-ES', { maximumFractionDigits: 2 }).format(n);
-    const discountLabel = (i: QuoteLineItem) =>
-      this.calc.lineDiscount(i) > 0 ? (i.discountType === 'percent' ? `${num(i.discount)} %` : `-${eur(this.calc.lineDiscount(i))}`) : '';
 
-    const labels = ['Concepto', 'Uds.', 'Precio ud.', ...(hasDiscount ? ['Dto.'] : []), 'Importe'];
+    const labels = ['Concepto', 'Uds.', 'Precio ud.', 'Importe'];
     // Las columnas numéricas se alinean a la derecha también en cabecera y pie.
     const head = labels.map((content, i) => (i === 0 ? content : { content, styles: { halign: 'right' as const } }));
+    const eb = quote.earlyBooking;
+    // Con reserva temprana, los conceptos a los que se aplica llevan un asterisco.
     const body = items.map((i) => [
-      i.concept,
+      eb && this.calc.appliesEarly(i) ? `${i.concept} *` : i.concept,
       num(i.units),
       eur(i.unitPrice),
-      ...(hasDiscount ? [discountLabel(i)] : []),
       eur(this.calc.lineTotal(i)),
     ]);
     const footCells = head.length - 1;
-    const eb = quote.earlyBooking;
-    const earlyPrice = eb ? this.calc.earlyBookingPrice(quote.totalAmount, eb.percent) : 0;
+    const plan = this.calc.paymentPlan(items, eb ? eb.percent : null);
 
     autoTable(doc, {
       startY: Math.max(clientBottom, eventBottom) + 4,
@@ -167,53 +200,84 @@ export class PdfGeneratorService {
         ...(eb
           ? [[
               {
-                content: `Con reserva temprana (-${num(eb.percent)} %) antes del ${fmtDate(eb.deadline)}`,
+                content: `Con reserva temprana (-${num(eb.percent)} %), hasta el ${fmtDate(eb.deadline)} (incluido)`,
                 colSpan: footCells,
-                styles: { halign: 'right' as const, fillColor: ROSE, textColor: [255, 255, 255] as [number, number, number], fontSize: 10 },
+                styles: { halign: 'right' as const, fillColor: ROSE, textColor: [255, 255, 255] as [number, number, number], fontSize: d.font + 1 },
               },
-              { content: eur(earlyPrice), styles: { halign: 'right' as const, fillColor: ROSE, textColor: [255, 255, 255] as [number, number, number] } },
+              { content: eur(plan.early!.amount), styles: { halign: 'right' as const, fillColor: ROSE, textColor: [255, 255, 255] as [number, number, number] } },
             ]]
           : []),
       ],
       theme: 'plain',
-      styles: { fontSize: 9.5, cellPadding: 3, textColor: INK },
+      styles: { fontSize: d.font + 0.5, cellPadding: d.pad, textColor: INK },
       headStyles: { fillColor: ROSE, textColor: 255, fontStyle: 'bold' },
-      footStyles: { fillColor: [251, 234, 232], textColor: INK, fontStyle: 'bold', fontSize: 11 },
+      footStyles: { fillColor: [251, 234, 232], textColor: INK, fontStyle: 'bold', fontSize: d.font + 2 },
       columnStyles: {
         1: { halign: 'right', cellWidth: 16 },
         2: { halign: 'right', cellWidth: 28 },
-        ...(hasDiscount ? { 3: { halign: 'right', cellWidth: 24 } } : {}),
         [head.length - 1]: { halign: 'right', cellWidth: 30 },
       },
       margin: { left: M, right: M },
     });
 
+    // Nota de los conceptos con descuento por reserva temprana
+    let afterTable: number = (doc as any).lastAutoTable.finalY;
+    if (eb) {
+      doc.setFont('helvetica', 'normal').setFontSize(8).setTextColor(...MUTED);
+      doc.text('* Concepto incluido en el descuento por reserva temprana.', M, afterTable + 5);
+      afterTable += 5;
+    }
+
+    // Importes de pago: reserva (40 %) y resto (60 %), con y sin descuento por reserva temprana
+    let planY = afterTable + d.gap + 2;
+    if (planY > 235) { doc.addPage(); planY = 20; }
+    doc.setFont('times', 'bold').setFontSize(12).setTextColor(...INK).text('Importes de pago', M, planY);
+    const dayAfter = (iso: string) => {
+      const [yy, mm, dd] = iso.split('-').map(Number);
+      return this.calc.earlyBookingDeadline(new Date(yy, mm - 1, dd), 1);
+    };
+    const splitRow = (label: string, s: { amount: number; deposit: number; remainder: number }) => [label, eur(s.amount), eur(s.deposit), eur(s.remainder)];
+    autoTable(doc, {
+      startY: planY + 3,
+      head: [[eb ? 'Confirmación de la reserva' : 'Concepto', ...['Total', `Reserva (${DEPOSIT_PERCENT} %)`, `Resto (${100 - DEPOSIT_PERCENT} %)`].map((content) => ({ content, styles: { halign: 'right' as const } }))]],
+      body: [
+        ...(eb && plan.early ? [splitRow(`Hasta el ${fmtDate(eb.deadline)} (incluido)`, plan.early)] : []),
+        splitRow(eb ? `A partir del ${fmtDate(dayAfter(eb.deadline))}` : 'Total del presupuesto', plan.regular),
+      ],
+      theme: 'plain',
+      styles: { fontSize: d.font + 0.5, cellPadding: d.planPad, textColor: INK },
+      headStyles: { fillColor: [251, 234, 232], textColor: INK, fontStyle: 'bold' },
+      columnStyles: { 1: { halign: 'right', cellWidth: 28, fontStyle: 'bold' }, 2: { halign: 'right', cellWidth: 32 }, 3: { halign: 'right', cellWidth: 32 } },
+      margin: { left: M, right: M },
+    });
+
     // Condiciones de reserva y pago
-    let y = (doc as any).lastAutoTable.finalY + 12;
+    let y = (doc as any).lastAutoTable.finalY + d.gap + 4;
     const section = (title: string, lines: string[]) => {
       if (y > 250) { doc.addPage(); y = 20; }
       doc.setFont('times', 'bold').setFontSize(12).setTextColor(...INK).text(title, M, y);
-      y += 6;
-      doc.setFont('helvetica', 'normal').setFontSize(9).setTextColor(...INK);
+      y += d.titleGap;
+      doc.setFont('helvetica', 'normal').setFontSize(d.font).setTextColor(...INK);
       for (const l of lines) {
         const wrapped = doc.splitTextToSize(l, W - 2 * M);
         doc.text(wrapped, M, y);
-        y += 4.6 * wrapped.length + 1;
+        y += d.row * wrapped.length + 1;
       }
-      y += 4;
+      y += d.gap / 2;
     };
 
     section('Condiciones de reserva y pago', [
-      '• Pago del 40% por adelantado para la confirmación de la reserva.',
-      '• Pago del 60% restante la semana anterior al evento, o en efectivo el mismo día del evento (bajo petición previa).',
+      `• Pago del ${DEPOSIT_PERCENT}% por adelantado para la confirmación de la reserva.`,
+      `• Pago del ${100 - DEPOSIT_PERCENT}% restante la semana anterior al evento, o en efectivo el mismo día del evento (bajo petición previa).`,
       ...(eb
-        ? [`• Descuento por reserva temprana: ${num(eb.percent)} % de descuento sobre el total (${eur(earlyPrice)} en lugar de ${eur(quote.totalAmount)}) si la reserva se confirma antes del ${fmtDate(eb.deadline)}. Pasada esa fecha se aplica el precio total.`]
+        ? [`• Descuento por reserva temprana: ${num(eb.percent)} % de descuento sobre los conceptos marcados con * si la reserva se confirma (con el pago del ${DEPOSIT_PERCENT} %) hasta el ${fmtDate(eb.deadline)}, incluido. A partir del día siguiente se aplica el precio sin descuento.`]
         : []),
       ...paymentLines(providers),
     ]);
     if (settings.pdfObservations?.trim()) {
       section('Observaciones', [settings.pdfObservations]);
     }
+    this.drawSignature(doc, M, y, settings, d);
 
     return doc;
   }
