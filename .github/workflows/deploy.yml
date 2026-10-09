@@ -26,6 +26,8 @@ jobs:
           node-version: 24
           cache: npm
       - run: npm ci
+      - name: Use example environment
+        run: cp src/environments/environment.example.ts src/environments/environment.ts
       - name: Inject Firebase config
         if: ${{ env.FIREBASE_CONFIG != '' }}
         run: |

@@ -2,19 +2,27 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
+    // Único administrador de la aplicación.
+    // Firebase Auth garantiza un solo usuario por correo, así que nadie más
+    // puede registrarse con este email una vez creada la cuenta.
+    function isAdmin() {
+      return request.auth != null
+          && request.auth.token.email == 'estudi.renova.art@gmail.com';
+    }
+
     // Presupuestos: creación pública (con estado inicial forzado); resto solo admin.
     match /quotes/{quoteId} {
       allow create: if request.resource.data.status == 'pendiente'
                     && request.resource.data.travelCost == 0
                     && request.resource.data.client.termsAccepted == true
                     && request.resource.data.client.privacyAccepted == true;
-      allow read, update, delete: if request.auth != null;
+      allow read, update, delete: if isAdmin();
     }
 
     // Configuración: lectura pública, escritura solo admin.
     match /settings/{docId} {
       allow read: if true;
-      allow write: if request.auth != null;
+      allow write: if isAdmin();
     }
 
     // Contador de numeración por año: el formulario público solo puede incrementarlo.
