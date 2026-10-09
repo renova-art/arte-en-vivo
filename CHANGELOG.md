@@ -1,3 +1,10 @@
+## [1.0.2](https://github.com/renova-art/arte-en-vivo/compare/v1.0.1...v1.0.2) (2026-10-09)
+
+
+### Bug Fixes
+
+* renombra a Arte en vivo, oculta portafolio y añade textos legales ([5522874](https://github.com/renova-art/arte-en-vivo/commit/5522874ace167a34d5cbc5b82bfddfb955a19370))
+
 ## [1.0.1](https://github.com/renova-art/arte-en-vivo/compare/v1.0.0...v1.0.1) (2026-10-09)
 
 
