@@ -1,6 +1,6 @@
 import { Injectable } from '@angular/core';
-import { DEPOSIT_PERCENT } from '../config/defaults';
-import { PricingTier, Quote, QuoteLineItem } from '../models';
+import { DEPOSIT_PERCENT, NIGHT_END_HOUR, NIGHT_START_HOUR } from '../config/defaults';
+import { EventDetails, EventType, PricingTier, Quote, QuoteLineItem, Tariff } from '../models';
 
 /** Importe total y su reparto entre la reserva y el resto. */
 export interface PaymentSplit {
@@ -11,6 +11,11 @@ export interface PaymentSplit {
 
 @Injectable({ providedIn: 'root' })
 export class QuoteCalculatorService {
+  /** Tramos de la tarifa que corresponde al tipo de evento; si ninguna lo incluye, los de la primera. */
+  tiersFor(tariffs: Tariff[], type: EventType): PricingTier[] {
+    return (tariffs.find((t) => t.eventTypes.includes(type)) ?? tariffs[0])?.tiers ?? [];
+  }
+
   getHourlyRate(guests: number, tiers: PricingTier[]): number {
     const sorted = [...tiers].sort((a, b) => a.minGuests - b.minGuests);
     const tier =
@@ -19,11 +24,56 @@ export class QuoteCalculatorService {
     return tier?.pricePerHour ?? 0;
   }
 
-  calculate(hours: number, guests: number, travelCost: number, tiers: PricingTier[]) {
+  calculate(hours: number, guests: number, travelCost: number, tiers: PricingTier[], nightCost = 0) {
     const appliedHourlyRate = this.getHourlyRate(guests, tiers);
     const subtotalHours = round2(hours * appliedHourlyRate);
-    const totalAmount = round2(subtotalHours + (travelCost || 0));
+    const totalAmount = round2(subtotalHours + (travelCost || 0) + nightCost);
     return { appliedHourlyRate, subtotalHours, totalAmount };
+  }
+
+  // ---- Horario y nocturnidad ----
+  private minutesOf(time: string | undefined): number | null {
+    const m = /^(\d{1,2}):(\d{2})$/.exec(time ?? '');
+    return m ? Number(m[1]) * 60 + Number(m[2]) : null;
+  }
+
+  /** Hora de fin (HH:mm) = hora de inicio + horas contratadas. Vacío si no hay hora de inicio. */
+  endTime(startTime: string | undefined, hours: number): string {
+    const start = this.minutesOf(startTime);
+    if (start === null) return '';
+    const end = Math.round(start + hours * 60) % (24 * 60);
+    return `${String(Math.floor(end / 60)).padStart(2, '0')}:${String(end % 60).padStart(2, '0')}`;
+  }
+
+  /** Horas de servicio dentro de la franja nocturna (de las 22:00 a las 06:00 del día siguiente). */
+  nightHours(startTime: string | undefined, hours: number): number {
+    const start = this.minutesOf(startTime);
+    if (start === null || !hours) return 0;
+    const end = start + hours * 60;
+    const overlap = (from: number, to: number) => Math.max(0, Math.min(end, to) - Math.max(start, from));
+    const night = overlap(0, NIGHT_END_HOUR * 60) + overlap(NIGHT_START_HOUR * 60, (24 + NIGHT_END_HOUR) * 60);
+    return round2(night / 60);
+  }
+
+  /** Concepto del plus de nocturnidad. */
+  nightLine(units: number, hourlyRate: number): QuoteLineItem {
+    return {
+      id: 'night',
+      concept: `Plus de nocturnidad (horas a partir de las ${NIGHT_START_HOUR}:00)`,
+      units,
+      unitPrice: hourlyRate,
+      earlyDiscount: false,
+    };
+  }
+
+  /** Conceptos iniciales de un presupuesto: servicio, plus de nocturnidad (si procede) y desplazamiento. */
+  buildLineItems(event: EventDetails, hourlyRate: number, travelCost: number, nightRate: number): QuoteLineItem[] {
+    const night = this.nightHours(event.startTime, event.durationHours);
+    return [
+      { id: 'service', concept: 'Servicio de ilustración en vivo (horas)', units: event.durationHours, unitPrice: hourlyRate, earlyDiscount: true },
+      ...(night > 0 ? [this.nightLine(night, nightRate)] : []),
+      { id: 'travel', concept: 'Desplazamiento', units: 1, unitPrice: travelCost, earlyDiscount: false },
+    ];
   }
 
   // ---- Líneas de concepto ----

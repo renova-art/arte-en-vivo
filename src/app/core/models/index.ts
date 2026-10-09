@@ -12,6 +12,14 @@ export interface StudioInfo {
 }
 
 /** Cada proveedora (persona) que presta el servicio. */
+/** Tarifa: precios por hora según invitados, aplicables a unos tipos de evento. */
+export interface Tariff {
+  id: string;
+  name: string;
+  eventTypes: EventType[]; // tipos a los que se aplica (los tipos sin tarifa usan la primera)
+  tiers: PricingTier[];
+}
+
 export interface ProviderPerson {
   name: string;
   nif: string;
@@ -37,9 +45,11 @@ export interface AppSettings {
   currentYear: number;
   studio: StudioInfo;
   providers: ProviderPerson[]; // Las dos proveedoras
-  pricingTiers: PricingTier[];
+  tariffs: Tariff[]; // La primera es la tarifa por defecto
   earlyBooking: EarlyBookingDefaults;
   signature: SignatureSettings;
+  nightSurcharge: number; // €/hora de servicio a partir de las 22:00 (plus de nocturnidad)
+  vatExempt: boolean; // Operaciones exentas de IVA (art. 20.Uno.26.º Ley 37/1992): se indica en el PDF
   logo?: string; // Data URL (PNG/JPEG) para el PDF; solo en el documento privado
   pdfObservations: string;
 }
@@ -59,10 +69,10 @@ export interface EventDetails {
   type: EventType;
   customTypeDescription?: string;
   date: string; // YYYY-MM-DD
+  startTime?: string; // Hora de inicio del servicio (HH:mm); los presupuestos antiguos no la tienen
   location: string;
   durationHours: number;
   guestCount: number;
-  extraPostIllustrations: boolean;
   description?: string;
 }
 

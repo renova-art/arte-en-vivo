@@ -88,7 +88,7 @@ function termsSections(settings: AppSettings): Section[] {
     {
       title: '2. Objeto del servicio',
       paragraphs: [
-        'El servicio consiste en la realización de ilustraciones en directo durante un evento (bodas, bautizos, comuniones, cumpleaños u otras celebraciones) durante el número de horas acordado, y, si así se contrata, de ilustraciones adicionales a posteriori.',
+        'El servicio consiste en la realización de ilustraciones en directo durante un evento (bodas, bautizos, comuniones, cumpleaños u otras celebraciones) durante el número de horas acordado.',
         `La capacidad máxima del servicio es de ${MAX_ILLUSTRATIONS_PER_HOUR} ilustraciones por hora. Las ilustraciones pueden ser individuales, en pareja o en grupos de un máximo de 4 personas.`,
       ],
     },

@@ -1,19 +1,21 @@
-import { ChangeDetectionStrategy, Component, computed, inject, input, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, HostListener, computed, inject, input, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
+import { HasUnsavedChanges } from '../../../core/guards/unsaved-changes.guard';
 import { DEFAULT_SETTINGS, DEPOSIT_PERCENT, EVENT_TYPE_LABELS } from '../../../core/config/defaults';
 import { AppSettings, EventDetails, EventType, Quote, QuoteLineItem, QuoteStatus } from '../../../core/models';
 import { DateBlockedError, FirebaseService } from '../../../core/services/firebase.service';
 import { PdfGeneratorService } from '../../../core/services/pdf-generator.service';
 import { QuoteCalculatorService } from '../../../core/services/quote-calculator.service';
 import { DatePicker } from '../../../shared/components/date-picker';
+import { TimePicker } from '../../../shared/components/time-picker';
 import { StatusBadge } from '../../../shared/components/layout';
 import { EuroCurrencyPipe } from '../../../shared/pipes/pipes';
 
 @Component({
   selector: 'app-detail',
   standalone: true,
-  imports: [FormsModule, RouterLink, DatePicker, StatusBadge, EuroCurrencyPipe],
+  imports: [FormsModule, RouterLink, DatePicker, TimePicker, StatusBadge, EuroCurrencyPipe],
   changeDetection: ChangeDetectionStrategy.Eager,
   template: `
     <a routerLink="/admin/presupuestos" class="text-sm text-ink-500 hover:text-ink-900">← Volver a presupuestos</a>
@@ -78,13 +80,14 @@ import { EuroCurrencyPipe } from '../../../shared/pipes/pipes';
             <input id="ev-guests" type="number" min="1" class="input" [ngModel]="ev.guestCount" (ngModelChange)="setGuests(+$event || 0)" />
           </div>
           <div>
+            <label class="label" for="ev-time">Hora de inicio</label>
+            <app-time-picker inputId="ev-time" [clearable]="true" [ngModel]="ev.startTime ?? ''" (ngModelChange)="setStartTime($event)" />
+            @if (scheduleNote()) { <p class="mt-1 text-xs text-ink-500">{{ scheduleNote() }}</p> }
+          </div>
+          <div>
             <label class="label" for="ev-hours">Duración (horas)</label>
             <input id="ev-hours" type="number" min="1" step="1" class="input" [ngModel]="ev.durationHours" (ngModelChange)="setDuration(+$event || 0)" />
           </div>
-          <label class="flex items-center gap-2 sm:col-span-2">
-            <input type="checkbox" class="accent-blush-400" [ngModel]="ev.extraPostIllustrations" (ngModelChange)="patchEvent({ extraPostIllustrations: $event })" />
-            Extra: ilustraciones a posteriori <span class="text-xs text-ink-500">(solo uso interno, no aparece en el PDF)</span>
-          </label>
           <div class="sm:col-span-2">
             <label class="label" for="ev-desc">Descripción</label>
             <textarea id="ev-desc" rows="2" class="input" [ngModel]="ev.description ?? ''" (ngModelChange)="patchEvent({ description: $event })"></textarea>
@@ -201,7 +204,7 @@ import { EuroCurrencyPipe } from '../../../shared/pipes/pipes';
     }
   `,
 })
-export class Detail {
+export class Detail implements HasUnsavedChanges {
   readonly id = input.required<string>(); // desde la ruta (withComponentInputBinding)
 
   private readonly firebase = inject(FirebaseService);
@@ -241,13 +244,23 @@ export class Detail {
     const q = this.quote();
     if (!q) return false;
     const current = { event: this.event(), items: this.items(), status: this.status(), early: this.early() };
-    const saved = { event: q.event, items: this.calc.getLineItems(q), status: q.status, early: this.initialEarly(q) };
+    const saved = { event: this.cleanEvent(q.event), items: this.calc.getLineItems(q), status: q.status, early: this.initialEarly(q) };
     return JSON.stringify(current) !== JSON.stringify(saved);
   });
   readonly created = computed(() => {
     const q = this.quote();
     return q ? new Date(q.createdAt).toLocaleString('es-ES') : '';
   });
+
+  hasUnsavedChanges(): boolean {
+    return this.dirty();
+  }
+
+  /** Aviso del navegador al recargar o cerrar la pestaña con cambios sin guardar. */
+  @HostListener('window:beforeunload', ['$event'])
+  onBeforeUnload(event: BeforeUnloadEvent) {
+    if (this.hasUnsavedChanges()) event.preventDefault();
+  }
 
   async ngOnInit() {
     try {
@@ -261,10 +274,16 @@ export class Detail {
   }
 
   private load(q: Quote) {
-    this.event.set({ ...q.event });
+    this.event.set(this.cleanEvent(q.event));
     this.items.set(this.calc.getLineItems(q).map((i) => ({ ...i })));
     this.status.set(q.status);
     this.early.set(this.initialEarly(q));
+  }
+
+  /** Quita el campo "extra a posteriori" que tenían los presupuestos antiguos (ya no existe). */
+  private cleanEvent(e: EventDetails): EventDetails {
+    const { extraPostIllustrations, ...rest } = e as EventDetails & { extraPostIllustrations?: boolean };
+    return rest;
   }
 
   /** Reserva temprana guardada; en presupuestos antiguos (sin el campo) se aplica la configuración por defecto. */
@@ -291,20 +310,66 @@ export class Detail {
   }
 
   setType(type: EventType) {
+    const prevRate = this.rateFor(this.event().type, this.event().guestCount);
+    const newRate = this.rateFor(type, this.event().guestCount);
     this.patchEvent({ type, ...(type !== 'especial' && { customTypeDescription: undefined }) });
+    // Cambiar de tipo puede cambiar de tarifa: la línea de servicio la sigue mientras no se haya editado a mano
+    this.items.update((list) => list.map((i) => (i.id === 'service' && i.unitPrice === prevRate ? { ...i, unitPrice: newRate } : i)));
   }
+
+  /** Precio por hora según la tarifa del tipo de evento y el número de invitados. */
+  private rateFor(type: EventType, guests: number): number {
+    return this.calc.getHourlyRate(guests, this.calc.tiersFor(this.settings().tariffs, type));
+  }
+
+  readonly scheduleNote = computed(() => {
+    const e = this.event();
+    const end = this.calc.endTime(e.startTime, e.durationHours);
+    if (!end) return '';
+    const night = this.calc.nightHours(e.startTime, e.durationHours);
+    return `Termina a las ${end}${night > 0 ? ` · ${night} h de nocturnidad` : ''}`;
+  });
 
   /** Mantiene sincronizada la línea de servicio mientras no se haya editado a mano. */
   setDuration(hours: number) {
-    const prev = this.event().durationHours;
+    const prev = { startTime: this.event().startTime, hours: this.event().durationHours };
     this.patchEvent({ durationHours: hours });
-    this.items.update((list) => list.map((i) => (i.id === 'service' && i.units === prev ? { ...i, units: hours } : i)));
+    this.items.update((list) => list.map((i) => (i.id === 'service' && i.units === prev.hours ? { ...i, units: hours } : i)));
+    this.syncNight(prev);
+  }
+
+  setStartTime(time: string) {
+    const prev = { startTime: this.event().startTime, hours: this.event().durationHours };
+    this.patchEvent({ startTime: time || undefined });
+    this.syncNight(prev);
+  }
+
+  /**
+   * Ajusta el concepto de nocturnidad al nuevo horario: lo actualiza (o quita) si no se había editado a mano
+   * y lo añade si antes no había horas nocturnas. Si lo quitaste a propósito, no se vuelve a añadir.
+   */
+  private syncNight(prev: { startTime?: string; hours: number }) {
+    const ev = this.event();
+    const before = this.calc.nightHours(prev.startTime, prev.hours);
+    const after = this.calc.nightHours(ev.startTime, ev.durationHours);
+    this.items.update((list) => {
+      const night = list.find((i) => i.id === 'night');
+      if (night) {
+        if (night.units !== before) return list; // editado a mano
+        return after === 0 ? list.filter((i) => i.id !== 'night') : list.map((i) => (i.id === 'night' ? { ...i, units: after } : i));
+      }
+      if (before === 0 && after > 0) {
+        const at = list.findIndex((i) => i.id === 'service') + 1;
+        return [...list.slice(0, at), this.calc.nightLine(after, this.settings().nightSurcharge), ...list.slice(at)];
+      }
+      return list;
+    });
   }
 
   setGuests(guests: number) {
-    const tiers = this.settings().pricingTiers;
-    const prevRate = this.calc.getHourlyRate(this.event().guestCount, tiers);
-    const newRate = this.calc.getHourlyRate(guests, tiers);
+    const type = this.event().type;
+    const prevRate = this.rateFor(type, this.event().guestCount);
+    const newRate = this.rateFor(type, guests);
     this.patchEvent({ guestCount: guests });
     this.items.update((list) => list.map((i) => (i.id === 'service' && i.unitPrice === prevRate ? { ...i, unitPrice: newRate } : i)));
   }
@@ -351,11 +416,9 @@ export class Detail {
     const q = this.quote();
     if (!q) return;
     const ev = this.event();
-    const rate = this.calc.getHourlyRate(ev.guestCount, this.settings().pricingTiers);
+    const rate = this.rateFor(ev.type, ev.guestCount);
     const travel = this.items().find((i) => i.id === 'travel')?.unitPrice ?? q.travelCost;
-    this.items.set(
-      this.calc.getLineItems({ ...q, lineItems: undefined, event: ev, appliedHourlyRate: rate, travelCost: travel }).map((i) => ({ ...i })),
-    );
+    this.items.set(this.calc.buildLineItems(ev, rate, travel, this.settings().nightSurcharge));
   }
 
   // ---- Guardado / PDF ----

@@ -1,4 +1,4 @@
-import { AppSettings, EventType } from '../models';
+import { AppSettings, EventType, PricingTier, Tariff } from '../models';
 
 export const SETTINGS_COLLECTION = 'settings';
 export const SETTINGS_DOC = 'general';
@@ -14,9 +14,31 @@ export const MAX_BLOCK_RANGE_DAYS = 366;
 export const SHOW_PORTFOLIO = false;
 
 export const DEPOSIT_PERCENT = 40; // Reserva; el resto (60 %) se paga antes del evento
+// Mención de exención que se añade al PDF cuando la opción está marcada.
+export const VAT_EXEMPTION_TEXT =
+  'Operación exenta de IVA en virtud del artículo 20.Uno.26.º de la Ley 37/1992, de 28 de diciembre, del Impuesto sobre el Valor Añadido (servicios profesionales prestados por artistas plásticos).';
+
+// Plus de nocturnidad: horas de servicio entre las 22:00 y las 06:00.
+export const NIGHT_START_HOUR = 22;
+export const NIGHT_END_HOUR = 6;
+
 export const MIN_HOURS = 2;
 export const MAX_HOURS = 6;
 export const MAX_ILLUSTRATIONS_PER_HOUR = 10;
+
+const DEFAULT_TIERS: PricingTier[] = [
+  { minGuests: 0, maxGuests: 100, pricePerHour: 150 },
+  { minGuests: 101, maxGuests: 150, pricePerHour: 160 },
+  { minGuests: 151, maxGuests: null, pricePerHour: 170 },
+];
+
+/** Tarifas iniciales a partir de unos tramos: bodas, bautizos y comuniones por un lado y cumpleaños por otro. */
+export function defaultTariffs(tiers: PricingTier[]): Tariff[] {
+  return [
+    { id: 'general', name: 'Bodas, bautizos y comuniones', eventTypes: ['boda', 'bautizo', 'comunion'], tiers: structuredClone(tiers) },
+    { id: 'cumpleanos', name: 'Cumpleaños', eventTypes: ['cumpleanos'], tiers: structuredClone(tiers) },
+  ];
+}
 
 export const DEFAULT_SETTINGS: AppSettings = {
   initialQuoteNumber: 1,
@@ -32,11 +54,9 @@ export const DEFAULT_SETTINGS: AppSettings = {
   ],
   earlyBooking: { percent: 10, days: 30 },
   signature: { greeting: 'Atentamente,', names: '' },
-  pricingTiers: [
-    { minGuests: 0, maxGuests: 100, pricePerHour: 150 },
-    { minGuests: 101, maxGuests: 150, pricePerHour: 160 },
-    { minGuests: 151, maxGuests: null, pricePerHour: 170 },
-  ],
+  nightSurcharge: 20,
+  vatExempt: true,
+  tariffs: defaultTariffs(DEFAULT_TIERS),
   pdfObservations:
     'Este presupuesto tiene una validez de 30 días. Las ilustraciones se realizan en el formato y estilo acordados con el cliente.',
 };

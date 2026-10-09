@@ -1,7 +1,7 @@
 import { Injectable, inject } from '@angular/core';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
-import { DEPOSIT_PERCENT, EVENT_TYPE_LABELS } from '../config/defaults';
+import { DEPOSIT_PERCENT, EVENT_TYPE_LABELS, VAT_EXEMPTION_TEXT } from '../config/defaults';
 import { AppSettings, ProviderPerson, Quote } from '../models';
 import { defaultSignatureNames } from '../config/signature';
 import { QuoteCalculatorService } from './quote-calculator.service';
@@ -170,7 +170,9 @@ export class PdfGeneratorService {
       ['Fecha', fmtDate(e.date)],
       ['Lugar', e.location],
       ['Invitados', String(e.guestCount)],
-      ['Duración', `${e.durationHours} horas`],
+      e.startTime
+        ? (['Horario', `${e.startTime} a ${this.calc.endTime(e.startTime, e.durationHours)} (${e.durationHours} h)`] as [string, string])
+        : (['Duración', `${e.durationHours} horas`] as [string, string]),
     ], M + half, half);
 
     // Tabla de conceptos (unidades × precio)
@@ -226,6 +228,13 @@ export class PdfGeneratorService {
       doc.setFont('helvetica', 'normal').setFontSize(8).setTextColor(...MUTED);
       doc.text('* Concepto incluido en el descuento por reserva temprana.', M, afterTable + 5);
       afterTable += 5;
+    }
+    // Mención de exención de IVA (si está marcada en la configuración)
+    if (settings.vatExempt) {
+      doc.setFont('helvetica', 'italic').setFontSize(8).setTextColor(...INK);
+      const vatLines: string[] = doc.splitTextToSize(VAT_EXEMPTION_TEXT, W - 2 * M);
+      doc.text(vatLines, M, afterTable + 5);
+      afterTable += 3.4 * vatLines.length + 2;
     }
 
     // Importes de pago: reserva (40 %) y resto (60 %), con y sin descuento por reserva temprana

@@ -8,6 +8,7 @@ import { AppSettings, EventType } from '../../core/models';
 import { FirebaseService } from '../../core/services/firebase.service';
 import { QuoteCalculatorService } from '../../core/services/quote-calculator.service';
 import { DatePicker } from '../../shared/components/date-picker';
+import { TimePicker } from '../../shared/components/time-picker';
 import { Footer, Header, Modal } from '../../shared/components/layout';
 import { LegalKind, LegalModal } from '../../shared/components/legal-modal';
 import { EuroCurrencyPipe } from '../../shared/pipes/pipes';
@@ -21,7 +22,7 @@ function futureDate(c: AbstractControl): ValidationErrors | null {
 @Component({
   selector: 'app-quote-form',
   standalone: true,
-  imports: [ReactiveFormsModule, DatePicker, Header, Footer, Modal, LegalModal, EuroCurrencyPipe],
+  imports: [ReactiveFormsModule, DatePicker, TimePicker, Header, Footer, Modal, LegalModal, EuroCurrencyPipe],
   changeDetection: ChangeDetectionStrategy.Eager,
   template: `
     <app-header />
@@ -54,12 +55,18 @@ function futureDate(c: AbstractControl): ValidationErrors | null {
               <app-date-picker inputId="date" [invalid]="bad('date')" [min]="today" [unavailable]="blockedList()" formControlName="date" />
               @if (bad('date')) { <p class="error">{{ dateError() }}</p> }
             </div>
-            <div class="order-3 sm:order-2">
+            <div class="order-2">
+              <label class="label" for="startTime">Hora de inicio del servicio *</label>
+              <app-time-picker inputId="startTime" [invalid]="bad('startTime')" formControlName="startTime" />
+              @if (bad('startTime')) { <p class="error">Indica la hora de inicio.</p> }
+              @if (endNote()) { <p class="mt-1 text-xs text-ink-500">{{ endNote() }}</p> }
+            </div>
+            <div class="order-4">
               <label class="label" for="guests">Número de invitados *</label>
               <input id="guests" type="number" min="1" class="input" [class.invalid]="bad('guestCount')" formControlName="guestCount" />
               @if (bad('guestCount')) { <p class="error">Indica al menos 1 invitado.</p> }
             </div>
-            <div class="order-2 sm:order-3 sm:col-span-2">
+            <div class="order-3 sm:col-span-2">
               <label class="label" for="location">Lugar del evento *</label>
               <input id="location" class="input" [class.invalid]="bad('location')" formControlName="location" placeholder="Ciudad / finca / restaurante" />
               @if (bad('location')) { <p class="error">Indica el lugar.</p> }
@@ -75,11 +82,6 @@ function futureDate(c: AbstractControl): ValidationErrors | null {
           <div class="rounded-xl border border-sage-200 bg-sage-50 p-4 text-sm text-ink-700">
             <strong>Capacidad máxima: 10 ilustraciones/hora.</strong> Las ilustraciones pueden ser individuales, en pareja o en grupos de máximo 4 personas.
           </div>
-
-          <label class="flex items-start gap-3 text-sm">
-            <input type="checkbox" class="mt-1 accent-blush-400" formControlName="extraPostIllustrations" />
-            <span>Me interesan ilustraciones adicionales a posteriori (extra opcional).</span>
-          </label>
 
           <div>
             <label class="label" for="desc">Cuéntanos más (opcional)</label>
@@ -125,6 +127,9 @@ function futureDate(c: AbstractControl): ValidationErrors | null {
         <section class="rounded-2xl bg-blush-100 p-4 text-center">
           <p class="text-sm text-ink-500">Estimación orientativa ({{ rate() }} €/h)</p>
           <p class="font-serif text-4xl font-semibold text-ink-900">{{ estimate() | euro }}</p>
+          @if (nightHours() > 0) {
+            <p class="mt-1 text-xs text-ink-500">Incluye {{ nightCost() | euro }} de plus de nocturnidad ({{ nightHours() }} h a partir de las 22:00).</p>
+          }
           <p class="mt-1 text-xs text-ink-500">Sin incluir desplazamiento. El presupuesto definitivo lo confirmaremos nosotros.</p>
         </section>
 
@@ -178,9 +183,9 @@ export class QuoteForm {
     customTypeDescription: [''],
     date: ['', [Validators.required, futureDate, this.availableDate]],
     location: ['', Validators.required],
+    startTime: ['', [Validators.required, Validators.pattern(/^([01]\d|2[0-3]):[0-5]\d$/)]],
     durationHours: [MIN_HOURS, [Validators.required, Validators.min(MIN_HOURS), Validators.max(MAX_HOURS)]],
     guestCount: [50, [Validators.required, Validators.min(1)]],
-    extraPostIllustrations: [false],
     description: [''],
     fullName: ['', [Validators.required, Validators.pattern(/^\S+(\s+\S+)+$/)]],
     phone: ['', [Validators.required, Validators.pattern(/^\+?[0-9][0-9 ()-]{7,16}$/)]],
@@ -194,8 +199,14 @@ export class QuoteForm {
   });
   readonly isSpecial = computed(() => this.value().type === 'especial');
   readonly duration = computed(() => Number(this.value().durationHours ?? MIN_HOURS));
+  readonly nightHours = computed(() => this.calc.nightHours(this.value().startTime, this.duration()));
+  readonly nightCost = computed(() => Math.round(this.nightHours() * this.settings().nightSurcharge));
+  readonly endNote = computed(() => {
+    const end = this.calc.endTime(this.value().startTime, this.duration());
+    return end ? `Terminaría a las ${end}.` : '';
+  });
   private readonly pricing = computed(() =>
-    this.calc.calculate(this.duration(), Number(this.value().guestCount) || 0, 0, this.settings().pricingTiers),
+    this.calc.calculate(this.duration(), Number(this.value().guestCount) || 0, 0, this.calc.tiersFor(this.settings().tariffs, this.value().type ?? 'boda'), this.nightCost()),
   );
   readonly rate = computed(() => this.pricing().appliedHourlyRate);
   readonly estimate = computed(() => this.pricing().totalAmount);
@@ -259,10 +270,10 @@ export class QuoteForm {
           type: v.type,
           customTypeDescription: v.type === 'especial' ? v.customTypeDescription.trim() : undefined,
           date: v.date,
+          startTime: v.startTime,
           location: v.location.trim(),
           durationHours: Number(v.durationHours),
           guestCount: Number(v.guestCount),
-          extraPostIllustrations: v.extraPostIllustrations,
           description: v.description.trim() || undefined,
         },
         this.settings(),

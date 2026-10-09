@@ -53,6 +53,14 @@ export interface PricingTier {
   pricePerHour: number;     // Por defecto: <=100 -> 150€, 101-150 -> 160€, >150 -> 170€
 }
 
+/** Tarifa: precios por hora según invitados, aplicables a unos tipos de evento. */
+export interface Tariff {
+  id: string;
+  name: string;
+  eventTypes: EventType[]; // los tipos sin tarifa usan la primera
+  tiers: PricingTier[];
+}
+
 /** Datos comunes del estudio (aparecen una sola vez en el PDF). */
 export interface StudioInfo {
   name: string;
@@ -80,8 +88,10 @@ export interface AppSettings {
   currentYear: number;
   studio: StudioInfo;
   providers: ProviderPerson[]; // Las dos proveedoras
-  pricingTiers: PricingTier[];
+  tariffs: Tariff[];       // Tarifas por tipo de evento; la primera es la de por defecto
   earlyBooking: EarlyBookingDefaults;
+  nightSurcharge: number;  // Plus de nocturnidad en €/hora para las horas de servicio posteriores a las 22:00 (20 por defecto)
+  vatExempt: boolean;      // Exento de IVA por art. 20.Uno.26.º Ley 37/1992 (activado por defecto; se indica en el PDF)
   signature: { greeting: string; names: string }; // Firma del PDF (names vacío = nombres de pila de las proveedoras)
   logo?: string;           // Data URL para el PDF (opcional, se guarda en settings/private)
   pdfObservations: string;   // Texto libre de observaciones legales o informativas
@@ -101,10 +111,10 @@ export interface EventDetails {
   type: EventType;
   customTypeDescription?: string; // Requerido si type === 'especial'
   date: string;                   // ISO Format YYYY-MM-DD
+  startTime?: string;             // Hora de inicio del servicio (HH:mm)
   location: string;
   durationHours: number;          // Mínimo 2h, Máximo 6h (pasos de 1h)
   guestCount: number;
-  extraPostIllustrations: boolean; // Extra opcional
   description?: string;           // Descripción opcional del evento
 }
 
@@ -221,8 +231,6 @@ Tipo de evento, fecha, lugar, nº de invitados, duración (horas).
 Desglose de Conceptos (Tabla):
 
 Servicio de ilustración en vivo (X horas x Tarifa €/h = Subtotal).
-
-Extra de ilustraciones a posterior (si aplica).
 
 Desplazamiento (X €).
 

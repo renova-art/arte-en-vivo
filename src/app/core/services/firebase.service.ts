@@ -23,12 +23,13 @@ import {
   MAX_BLOCK_RANGE_DAYS,
   COUNTERS_COLLECTION,
   DEFAULT_SETTINGS,
+  defaultTariffs,
   QUOTES_COLLECTION,
   SETTINGS_COLLECTION,
   SETTINGS_DOC,
   SETTINGS_PRIVATE_DOC,
 } from '../config/defaults';
-import { AppSettings, BlockedDate, BlockedRange, ClientData, EventDetails, ProviderPerson, Quote, QuoteStatus } from '../models';
+import { AppSettings, PricingTier, BlockedDate, BlockedRange, ClientData, EventDetails, ProviderPerson, Quote, QuoteStatus } from '../models';
 import { QuoteCalculatorService } from './quote-calculator.service';
 
 /** La fecha ya está bloqueada por otro presupuesto aceptado o por un bloqueo manual. */
@@ -64,7 +65,7 @@ export class FirebaseService {
     try {
       const snap = await getDoc(doc(this.db, SETTINGS_COLLECTION, SETTINGS_DOC));
       if (!snap.exists()) return structuredClone(DEFAULT_SETTINGS);
-      const { provider: legacy, ...data } = snap.data() as Partial<AppSettings> & { provider?: LegacyProvider };
+      const { provider: legacy, pricingTiers: legacyTiers, ...data } = snap.data() as Partial<AppSettings> & { provider?: LegacyProvider; pricingTiers?: PricingTier[] };
       const defaults = structuredClone(DEFAULT_SETTINGS);
       // Migración: antes había un único proveedor con la dirección dentro.
       const providers = data.providers?.length
@@ -79,7 +80,8 @@ export class FirebaseService {
         signature: { ...defaults.signature, ...data.signature },
         studio: { ...defaults.studio, ...(legacy && { address: legacy.address, email: legacy.email }), ...data.studio },
         providers: providers.map(({ name, nif, cifNif, phone, bizum, bankAccount }: ProviderPerson & { cifNif?: string }) => ({ name, nif: nif ?? cifNif ?? '', phone, bizum: !!bizum, bankAccount: bankAccount ?? '' })),
-        pricingTiers: data.pricingTiers?.length ? data.pricingTiers : DEFAULT_SETTINGS.pricingTiers,
+        // Migración: antes había una única lista de tramos para todos los eventos.
+        tariffs: data.tariffs?.length ? data.tariffs : defaultTariffs(legacyTiers?.length ? legacyTiers : defaults.tariffs[0].tiers),
       };
       return await this.withPrivateData(merged);
     } catch {
@@ -126,7 +128,13 @@ export class FirebaseService {
     const year = new Date().getFullYear();
     const counterRef = doc(this.db, COUNTERS_COLLECTION, String(year));
     const quoteRef = doc(collection(this.db, QUOTES_COLLECTION));
-    const calc = this.calculator.calculate(event.durationHours, event.guestCount, 0, settings.pricingTiers);
+    const rate = this.calculator.getHourlyRate(event.guestCount, this.calculator.tiersFor(settings.tariffs, event.type));
+    const lineItems = this.calculator.buildLineItems(event, rate, 0, settings.nightSurcharge);
+    const calc = {
+      appliedHourlyRate: rate,
+      subtotalHours: this.calculator.lineTotal(lineItems[0]),
+      totalAmount: this.calculator.itemsTotal(lineItems),
+    };
 
     return runTransaction(this.db, async (tx) => {
       const counterSnap = await tx.get(counterRef);
@@ -141,6 +149,7 @@ export class FirebaseService {
         client,
         event: stripUndefined(event),
         ...calc,
+        lineItems,
         earlyBooking:
           settings.earlyBooking.percent > 0
             ? { percent: settings.earlyBooking.percent, deadline: this.calculator.earlyBookingDeadline(new Date(), settings.earlyBooking.days) }

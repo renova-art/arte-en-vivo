@@ -1,11 +1,12 @@
 import { Component, inject, ChangeDetectionStrategy } from '@angular/core';
 import { Router, RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
+import { ConfirmHost } from '../../shared/components/confirm-host';
 import { FirebaseService } from '../../core/services/firebase.service';
 
 @Component({
   selector: 'app-admin-shell',
   standalone: true,
-  imports: [RouterOutlet, RouterLink, RouterLinkActive],
+  imports: [RouterOutlet, RouterLink, RouterLinkActive, ConfirmHost],
   changeDetection: ChangeDetectionStrategy.Eager,
   template: `
     <header class="border-b border-cream-200 bg-white">
@@ -20,6 +21,7 @@ import { FirebaseService } from '../../core/services/firebase.service';
       </div>
     </header>
     <main class="mx-auto max-w-6xl px-4 py-8"><router-outlet /></main>
+    <app-confirm-host />
   `,
 })
 export class AdminShell {
@@ -27,7 +29,7 @@ export class AdminShell {
   private readonly router = inject(Router);
 
   async logout() {
-    await this.firebase.logout();
-    this.router.navigateByUrl('/admin/login');
+    // Primero se navega: si el usuario cancela por cambios sin guardar, no se cierra la sesión.
+    if (await this.router.navigateByUrl('/admin/login')) await this.firebase.logout();
   }
 }

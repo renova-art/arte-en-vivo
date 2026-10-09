@@ -1,5 +1,6 @@
 import { Routes } from '@angular/router';
 import { authGuard } from './core/guards/auth.guard';
+import { unsavedChangesGuard } from './core/guards/unsaved-changes.guard';
 
 export const routes: Routes = [
   { path: '', loadComponent: () => import('./features/landing/landing').then((m) => m.Landing) },
@@ -23,10 +24,12 @@ export const routes: Routes = [
       },
       {
         path: 'presupuestos/:id',
+        canDeactivate: [unsavedChangesGuard],
         loadComponent: () => import('./features/admin/detail/detail').then((m) => m.Detail),
       },
       {
         path: 'configuracion',
+        canDeactivate: [unsavedChangesGuard],
         loadComponent: () => import('./features/admin/settings/settings').then((m) => m.Settings),
       },
     ],
