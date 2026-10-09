@@ -38,6 +38,18 @@ export class QuoteCalculatorService {
     return items.reduce((sum, i) => sum + this.lineTotal(i), 0);
   }
 
+  /** Fecha límite (YYYY-MM-DD) del descuento: `days` días a partir de la emisión. */
+  earlyBookingDeadline(issued: Date | string, days: number): string {
+    const d = new Date(issued);
+    d.setDate(d.getDate() + days);
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  }
+
+  /** Precio final con el descuento por reserva temprana (euros enteros). */
+  earlyBookingPrice(total: number, percent: number): number {
+    return total - Math.round((total * Math.min(Math.max(percent, 0), 100)) / 100);
+  }
+
   /** Líneas guardadas o, en presupuestos nuevos, las derivadas de los campos económicos. */
   getLineItems(q: Quote): QuoteLineItem[] {
     if (q.lineItems?.length) return q.lineItems;

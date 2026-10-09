@@ -20,12 +20,20 @@ export interface ProviderPerson {
   bankAccount: string; // Opcional ('' si no hay)
 }
 
+/** Valores por defecto del descuento por reserva temprana. */
+export interface EarlyBookingDefaults {
+  percent: number; // % de descuento
+  days: number;    // Días de validez desde la emisión del presupuesto
+}
+
 export interface AppSettings {
   initialQuoteNumber: number;
   currentYear: number;
   studio: StudioInfo;
   providers: ProviderPerson[]; // Las dos proveedoras
   pricingTiers: PricingTier[];
+  earlyBooking: EarlyBookingDefaults;
+  logo?: string; // Data URL (PNG/JPEG) para el PDF; solo en el documento privado
   pdfObservations: string;
 }
 
@@ -63,12 +71,31 @@ export interface QuoteLineItem {
   discountType: DiscountType;
 }
 
+/** Fecha en la que no se aceptan nuevas solicitudes (documento público, sin datos de clientes). */
+export interface BlockedDate {
+  date: string; // YYYY-MM-DD (id del documento)
+  source: 'quote' | 'manual';
+  quoteId?: string;
+  quoteNumber?: string;
+  rangeId?: string; // bloqueo manual: rango al que pertenece
+}
+
+/** Rango de fechas bloqueado a mano (vacaciones, eventos propios…). Solo lo ve el admin. */
+export interface BlockedRange {
+  id: string;
+  from: string; // YYYY-MM-DD
+  to: string;   // YYYY-MM-DD (igual a from si es un solo día)
+  label: string;
+}
+
 export interface Quote {
   id?: string;
   quoteNumber: string;
   createdAt: Date | string;
   client: ClientData;
   event: EventDetails;
+  // Descuento por reserva temprana (deadline: YYYY-MM-DD). undefined = presupuesto antiguo (se aplica el valor por defecto); null = desactivado.
+  earlyBooking?: { percent: number; deadline: string } | null;
   lineItems?: QuoteLineItem[];    // Si falta, se derivan de los campos económicos
   appliedHourlyRate: number;
   subtotalHours: number;

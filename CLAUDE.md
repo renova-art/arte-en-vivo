@@ -69,12 +69,20 @@ export interface ProviderPerson {
   bankAccount: string; // Opcional ('' si no hay)
 }
 
+/** Valores por defecto del descuento por reserva temprana. */
+export interface EarlyBookingDefaults {
+  percent: number; // % de descuento
+  days: number;    // Días de validez desde la emisión (por defecto 30)
+}
+
 export interface AppSettings {
   initialQuoteNumber: number; // Ej: 1 (se reinicia o formatea según año ej: PRES-2026-001)
   currentYear: number;
   studio: StudioInfo;
   providers: ProviderPerson[]; // Las dos proveedoras
   pricingTiers: PricingTier[];
+  earlyBooking: EarlyBookingDefaults;
+  logo?: string;           // Data URL para el PDF (opcional, se guarda en settings/private)
   pdfObservations: string;   // Texto libre de observaciones legales o informativas
 }
 
@@ -105,6 +113,7 @@ export interface Quote {
   createdAt: Date | string;
   client: ClientData;
   event: EventDetails;
+  earlyBooking?: { percent: number; deadline: string } | null; // Reserva temprana (activa por defecto; null = desactivada)
   
   // Cálculo económico
   appliedHourlyRate: number;      // Calculado según tramo de invitados
@@ -145,6 +154,14 @@ Acción al enviar:
 Crea el documento en Firestore con estado pendiente.
 
 Muestra modal o pantalla de confirmación/agradecimiento al cliente.
+
+Fechas bloqueadas (disponibilidad):
+
+Un presupuesto aceptado bloquea el día de su evento; el bloqueo se libera si cambia a otro estado o cambia la fecha.
+
+Desde /admin/configuracion se pueden bloquear fechas a mano, también rangos (Navidades, vacaciones...), con un título opcional visible solo para el admin.
+
+Los días bloqueados viven en la colección pública blockedDates/{YYYY-MM-DD} (solo origen, sin datos de clientes); los títulos de los rangos, en blockedRanges (solo admin). El formulario público no permite elegir esos días y las reglas de Firestore rechazan crear presupuestos para ellos.
 
 5.2. Lógica de Precios por Hora (Configurable)
 El cálculo de la tarifa por hora es automático en función del número de invitados:

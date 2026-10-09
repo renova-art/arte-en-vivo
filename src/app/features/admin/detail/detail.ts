@@ -3,16 +3,17 @@ import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
 import { DEFAULT_SETTINGS, EVENT_TYPE_LABELS } from '../../../core/config/defaults';
 import { AppSettings, EventDetails, EventType, Quote, QuoteLineItem, QuoteStatus } from '../../../core/models';
-import { FirebaseService } from '../../../core/services/firebase.service';
+import { DateBlockedError, FirebaseService } from '../../../core/services/firebase.service';
 import { PdfGeneratorService } from '../../../core/services/pdf-generator.service';
 import { QuoteCalculatorService } from '../../../core/services/quote-calculator.service';
+import { DatePicker } from '../../../shared/components/date-picker';
 import { StatusBadge } from '../../../shared/components/layout';
 import { EuroCurrencyPipe } from '../../../shared/pipes/pipes';
 
 @Component({
   selector: 'app-detail',
   standalone: true,
-  imports: [FormsModule, RouterLink, StatusBadge, EuroCurrencyPipe],
+  imports: [FormsModule, RouterLink, DatePicker, StatusBadge, EuroCurrencyPipe],
   changeDetection: ChangeDetectionStrategy.Eager,
   template: `
     <a routerLink="/admin/presupuestos" class="text-sm text-ink-500 hover:text-ink-900">← Volver a presupuestos</a>
@@ -36,8 +37,8 @@ import { EuroCurrencyPipe } from '../../../shared/pipes/pipes';
         <section class="card space-y-1 text-sm">
           <h2 class="mb-2 text-xl font-semibold">Cliente</h2>
           <p><span class="text-ink-500">Nombre:</span> {{ q.client.fullName }}</p>
-          <p><span class="text-ink-500">Teléfono:</span> <a [href]="'tel:' + q.client.phone">{{ q.client.phone }}</a></p>
-          <p><span class="text-ink-500">Email:</span> <a [href]="'mailto:' + q.client.email">{{ q.client.email }}</a></p>
+          <p><span class="text-ink-500">Teléfono:</span>&ngsp;<a [href]="'tel:' + q.client.phone">{{ q.client.phone }}</a></p>
+          <p><span class="text-ink-500">Email:</span>&ngsp;<a [href]="'mailto:' + q.client.email">{{ q.client.email }}</a></p>
           <p><span class="text-ink-500">T&C / RGPD:</span> {{ q.client.termsAccepted && q.client.privacyAccepted ? 'Aceptados' : 'No aceptados' }}</p>
           <p><span class="text-ink-500">Recibido:</span> {{ created() }}</p>
           <div class="!mt-4">
@@ -66,7 +67,7 @@ import { EuroCurrencyPipe } from '../../../shared/pipes/pipes';
           }
           <div>
             <label class="label" for="ev-date">Fecha</label>
-            <input id="ev-date" type="date" class="input" [ngModel]="ev.date" (ngModelChange)="patchEvent({ date: $event })" />
+            <app-date-picker inputId="ev-date" [ngModel]="ev.date" (ngModelChange)="patchEvent({ date: $event })" />
           </div>
           <div>
             <label class="label" for="ev-loc">Lugar</label>
@@ -151,6 +152,30 @@ import { EuroCurrencyPipe } from '../../../shared/pipes/pipes';
           </div>
         </div>
 
+        <div class="mt-4 rounded-xl border border-blush-200 bg-blush-50 p-4">
+          <label class="flex items-center gap-2 font-medium">
+            <input type="checkbox" class="accent-blush-400" [ngModel]="early() !== null" (ngModelChange)="toggleEarly($event)" />
+            Descuento por reserva temprana
+          </label>
+          @if (early(); as e) {
+            <div class="mt-3 grid items-end gap-3 sm:grid-cols-3">
+              <div>
+                <label class="label" for="eb-pct">Descuento (%)</label>
+                <input id="eb-pct" type="number" min="0" max="100" step="1" class="input" [ngModel]="e.percent" (ngModelChange)="patchEarly({ percent: +$event || 0 })" />
+              </div>
+              <div>
+                <label class="label" for="eb-date">Reservando antes del</label>
+                <app-date-picker inputId="eb-date" [ngModel]="e.deadline" (ngModelChange)="patchEarly({ deadline: $event })" />
+              </div>
+              <p class="pb-2 text-right">
+                Precio con descuento:
+                <strong class="font-serif text-2xl">{{ earlyPrice() | euro }}</strong>
+                <span class="block text-xs text-ink-500">Ahorro de {{ total() - earlyPrice()! | euro }}</span>
+              </p>
+            </div>
+          }
+        </div>
+
         <div class="mt-4 flex flex-wrap items-center justify-end gap-3 border-t border-cream-200 pt-4">
           @if (message() && (isError() || !dirty())) {
             <span class="mr-auto text-sm" [class.text-sage-500]="!isError()" [class.text-red-600]="isError()">{{ message() }}</span>
@@ -179,18 +204,23 @@ export class Detail {
   readonly event = signal<EventDetails>({} as EventDetails);
   readonly items = signal<QuoteLineItem[]>([]);
   readonly status = signal<QuoteStatus>('pendiente');
+  readonly early = signal<{ percent: number; deadline: string } | null>(null);
   readonly saving = signal(false);
   readonly message = signal('');
   readonly isError = signal(false);
 
   readonly total = computed(() => this.calc.itemsTotal(this.items()));
+  readonly earlyPrice = computed(() => {
+    const e = this.early();
+    return e ? this.calc.earlyBookingPrice(this.total(), e.percent) : null;
+  });
   readonly discountTotal = computed(() => this.items().reduce((s, i) => s + this.calc.lineDiscount(i), 0));
   /** True si el formulario difiere de lo último guardado. */
   readonly dirty = computed(() => {
     const q = this.quote();
     if (!q) return false;
-    const current = { event: this.event(), items: this.items(), status: this.status() };
-    const saved = { event: q.event, items: this.calc.getLineItems(q), status: q.status };
+    const current = { event: this.event(), items: this.items(), status: this.status(), early: this.early() };
+    const saved = { event: q.event, items: this.calc.getLineItems(q), status: q.status, early: this.initialEarly(q) };
     return JSON.stringify(current) !== JSON.stringify(saved);
   });
   readonly created = computed(() => {
@@ -213,6 +243,16 @@ export class Detail {
     this.event.set({ ...q.event });
     this.items.set(this.calc.getLineItems(q).map((i) => ({ ...i })));
     this.status.set(q.status);
+    this.early.set(this.initialEarly(q));
+  }
+
+  /** Reserva temprana guardada; en presupuestos antiguos (sin el campo) se aplica la configuración por defecto. */
+  private initialEarly(q: Quote): { percent: number; deadline: string } | null {
+    if (q.earlyBooking === undefined) {
+      const { percent, days } = this.settings().earlyBooking;
+      return percent > 0 ? { percent, deadline: this.calc.earlyBookingDeadline(q.createdAt, days) } : null;
+    }
+    return q.earlyBooking ? { ...q.earlyBooking } : null;
   }
 
   /** Vuelve al último estado guardado. */
@@ -246,6 +286,18 @@ export class Detail {
     const newRate = this.calc.getHourlyRate(guests, tiers);
     this.patchEvent({ guestCount: guests });
     this.items.update((list) => list.map((i) => (i.id === 'service' && i.unitPrice === prevRate ? { ...i, unitPrice: newRate } : i)));
+  }
+
+  // ---- Descuento por reserva temprana ----
+  toggleEarly(on: boolean) {
+    const q = this.quote();
+    if (!on || !q) return this.early.set(null);
+    const { percent, days } = this.settings().earlyBooking;
+    this.early.set({ percent, deadline: this.calc.earlyBookingDeadline(q.createdAt, days) });
+  }
+
+  patchEarly(patch: Partial<{ percent: number; deadline: string }>) {
+    this.early.update((e) => (e ? { ...e, ...patch } : e));
   }
 
   // ---- Conceptos ----
@@ -289,6 +341,7 @@ export class Detail {
       travelCost: travel ? this.calc.lineTotal(travel) : 0,
       totalAmount: this.calc.itemsTotal(items),
       status: this.status(),
+      earlyBooking: this.early(), // null = desactivado
     };
   }
 
@@ -305,17 +358,26 @@ export class Detail {
       this.message.set('Todos los conceptos necesitan un nombre.');
       return;
     }
+    const eb = this.early();
+    if (eb && (!eb.deadline || eb.percent <= 0 || eb.percent > 100)) {
+      this.message.set('Descuento por reserva temprana: indica un porcentaje entre 1 y 100 y la fecha límite.');
+      return;
+    }
     this.saving.set(true);
     this.message.set('');
     try {
       const updated = this.buildQuote(q);
       const { id, ...data } = updated;
-      await this.firebase.updateQuote(q.id, data);
+      await this.firebase.updateQuote(q.id, data, q);
       this.quote.set(updated);
       this.isError.set(false);
       this.message.set('Guardado.');
-    } catch {
-      this.message.set('No se pudo guardar.');
+    } catch (err) {
+      this.message.set(
+        err instanceof DateBlockedError
+          ? 'No se puede guardar como aceptado: esa fecha ya está bloqueada por otro presupuesto aceptado o por un bloqueo manual.'
+          : 'No se pudo guardar.',
+      );
     } finally {
       this.saving.set(false);
     }

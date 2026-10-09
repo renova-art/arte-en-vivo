@@ -7,6 +7,7 @@ import { DEFAULT_SETTINGS, EVENT_TYPE_LABELS, MAX_HOURS, MIN_HOURS } from '../..
 import { AppSettings, EventType } from '../../core/models';
 import { FirebaseService } from '../../core/services/firebase.service';
 import { QuoteCalculatorService } from '../../core/services/quote-calculator.service';
+import { DatePicker } from '../../shared/components/date-picker';
 import { Footer, Header, Modal } from '../../shared/components/layout';
 import { LegalKind, LegalModal } from '../../shared/components/legal-modal';
 import { EuroCurrencyPipe } from '../../shared/pipes/pipes';
@@ -20,7 +21,7 @@ function futureDate(c: AbstractControl): ValidationErrors | null {
 @Component({
   selector: 'app-quote-form',
   standalone: true,
-  imports: [ReactiveFormsModule, Header, Footer, Modal, LegalModal, EuroCurrencyPipe],
+  imports: [ReactiveFormsModule, DatePicker, Header, Footer, Modal, LegalModal, EuroCurrencyPipe],
   changeDetection: ChangeDetectionStrategy.Eager,
   template: `
     <app-header />
@@ -50,8 +51,8 @@ function futureDate(c: AbstractControl): ValidationErrors | null {
           <div class="grid gap-4 sm:grid-cols-2">
             <div class="order-1">
               <label class="label" for="date">Fecha del evento *</label>
-              <input id="date" type="date" class="input" [class.invalid]="bad('date')" [min]="today" formControlName="date" />
-              @if (bad('date')) { <p class="error">{{ form.controls.date.errors?.['past'] ? 'La fecha no puede ser pasada.' : 'Indica la fecha.' }}</p> }
+              <app-date-picker inputId="date" [invalid]="bad('date')" [min]="today" [unavailable]="blockedList()" formControlName="date" />
+              @if (bad('date')) { <p class="error">{{ dateError() }}</p> }
             </div>
             <div class="order-3 sm:order-2">
               <label class="label" for="guests">Número de invitados *</label>
@@ -167,10 +168,15 @@ export class QuoteForm {
   readonly sentNumber = signal('');
   readonly legal = signal<LegalKind | null>(null);
 
+  /** Fechas ya ocupadas (presupuestos aceptados o bloqueos del estudio). */
+  readonly blocked = signal<Set<string>>(new Set());
+  readonly blockedList = computed(() => [...this.blocked()]);
+  private readonly availableDate = (c: AbstractControl): ValidationErrors | null => (this.blocked().has(c.value) ? { blocked: true } : null);
+
   readonly form = this.fb.nonNullable.group({
     type: ['boda' as EventType],
     customTypeDescription: [''],
-    date: ['', [Validators.required, futureDate]],
+    date: ['', [Validators.required, futureDate, this.availableDate]],
     location: ['', Validators.required],
     durationHours: [MIN_HOURS, [Validators.required, Validators.min(MIN_HOURS), Validators.max(MAX_HOURS)]],
     guestCount: [50, [Validators.required, Validators.min(1)]],
@@ -196,6 +202,7 @@ export class QuoteForm {
 
   constructor() {
     this.firebase.getSettings().then((s) => this.settings.set(s));
+    this.refreshBlocked();
     this.form.controls.type.valueChanges.subscribe((t) => {
       const c = this.form.controls.customTypeDescription;
       c.setValidators(t === 'especial' ? Validators.required : null);
@@ -208,6 +215,23 @@ export class QuoteForm {
     this.legal.set(kind);
   }
 
+  dateError(): string {
+    const errors = this.form.controls.date.errors;
+    if (errors?.['blocked']) return 'Esa fecha ya no está disponible. Por favor, elige otra.';
+    return errors?.['past'] ? 'La fecha no puede ser pasada.' : 'Indica la fecha.';
+  }
+
+  /** Carga las fechas ocupadas y revalida la fecha elegida. */
+  private async refreshBlocked() {
+    try {
+      const list = await this.firebase.getBlockedDates();
+      this.blocked.set(new Set(list.map((b) => b.date)));
+      this.form.controls.date.updateValueAndValidity();
+    } catch {
+      // Sin conexión con la lista: las reglas del servidor siguen impidiendo fechas bloqueadas.
+    }
+  }
+
   bad(name: keyof typeof this.form.controls): boolean {
     const c = this.form.controls[name];
     return c.invalid && (c.touched || c.dirty);
@@ -215,6 +239,7 @@ export class QuoteForm {
 
   async submit() {
     this.error.set('');
+    await this.refreshBlocked(); // por si alguien reservó ese día mientras rellenaba el formulario
     if (this.form.invalid) {
       this.form.markAllAsTouched();
       return;

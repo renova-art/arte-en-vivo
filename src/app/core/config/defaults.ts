@@ -6,6 +6,9 @@ export const SETTINGS_DOC = 'general';
 export const SETTINGS_PRIVATE_DOC = 'private';
 export const QUOTES_COLLECTION = 'quotes';
 export const COUNTERS_COLLECTION = 'counters';
+export const BLOCKED_DATES_COLLECTION = 'blockedDates';
+export const BLOCKED_RANGES_COLLECTION = 'blockedRanges';
+export const MAX_BLOCK_RANGE_DAYS = 366;
 
 // Pon a true cuando haya fotos en el portafolio.
 export const SHOW_PORTFOLIO = false;
@@ -26,6 +29,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
     { name: 'Proveedora 1', nif: '00000000X', phone: '600 000 000', bizum: true, bankAccount: '' },
     { name: 'Proveedora 2', nif: '00000001R', phone: '600 000 001', bizum: false, bankAccount: '' },
   ],
+  earlyBooking: { percent: 10, days: 30 },
   pricingTiers: [
     { minGuests: 0, maxGuests: 100, pricePerHour: 150 },
     { minGuests: 101, maxGuests: 150, pricePerHour: 160 },

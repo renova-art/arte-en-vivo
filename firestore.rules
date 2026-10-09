@@ -15,8 +15,21 @@ service cloud.firestore {
       allow create: if request.resource.data.status == 'pendiente'
                     && request.resource.data.travelCost == 0
                     && request.resource.data.client.termsAccepted == true
-                    && request.resource.data.client.privacyAccepted == true;
+                    && request.resource.data.client.privacyAccepted == true
+                    // No se admiten solicitudes para fechas bloqueadas.
+                    && !exists(/databases/$(database)/documents/blockedDates/$(request.resource.data.event.date));
       allow read, update, delete: if isAdmin();
+    }
+
+    // Fechas bloqueadas (presupuestos aceptados y bloqueos manuales): lectura pública, escritura solo admin.
+    match /blockedDates/{date} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // Rangos bloqueados a mano (con su título): solo admin.
+    match /blockedRanges/{id} {
+      allow read, write: if isAdmin();
     }
 
     // Configuración: lectura pública, escritura solo admin.

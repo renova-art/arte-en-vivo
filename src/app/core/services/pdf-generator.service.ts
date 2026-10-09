@@ -13,7 +13,7 @@ const eur = (n: number) =>
   new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(n);
 
 const fmtDate = (d: Date | string) =>
-  new Date(d).toLocaleDateString('es-ES', { day: '2-digit', month: 'long', year: 'numeric' });
+  new Date(d).toLocaleDateString('es-ES', { day: 'numeric', month: 'long', year: 'numeric' });
 
 @Injectable({ providedIn: 'root' })
 export class PdfGeneratorService {
@@ -30,6 +30,24 @@ export class PdfGeneratorService {
     setTimeout(() => URL.revokeObjectURL(url), 60_000);
   }
 
+  /** Dibuja el logo ajustado a la caja (sin deformarlo). Devuelve su tamaño o null si no se pudo usar. */
+  private drawLogo(doc: jsPDF, dataUrl: string, x: number, y: number, maxW: number, maxH: number): { w: number; h: number } | null {
+    try {
+      const props = doc.getImageProperties(dataUrl);
+      const ratio = props.width / props.height;
+      let h = maxH;
+      let w = h * ratio;
+      if (w > maxW) {
+        w = maxW;
+        h = w / ratio;
+      }
+      doc.addImage(dataUrl, props.fileType, x, y + (maxH - h) / 2, w, h);
+      return { w, h };
+    } catch {
+      return null; // imagen corrupta: se usa el monograma
+    }
+  }
+
   private build(quote: Quote, settings: AppSettings): jsPDF {
     const doc = new jsPDF({ unit: 'mm', format: 'a4' });
     doc.setProperties({ title: `Presupuesto ${quote.quoteNumber}` });
@@ -37,32 +55,41 @@ export class PdfGeneratorService {
     const M = 18;
     const { studio, providers } = settings;
 
-    // Logo (monograma dibujado) + datos comunes del estudio
-    doc.setFillColor(...ROSE);
-    doc.circle(M + 8, 24, 8, 'F');
-    doc.setTextColor(255, 255, 255).setFont('times', 'bolditalic').setFontSize(16);
-    doc.text(studio.name.trim().charAt(0).toUpperCase() || 'A', M + 8, 26.5, { align: 'center' });
-
-    doc.setTextColor(...INK).setFont('times', 'bold').setFontSize(15);
-    doc.text(studio.name, M + 20, 23);
-    doc.setFont('helvetica', 'normal').setFontSize(8.5).setTextColor(...MUTED);
-    doc.text([...doc.splitTextToSize(studio.address, W / 2 - M - 20), studio.email], M + 20, 28);
+    // Logo configurado (caja de 64×22 mm centrada en la cabecera, sin deformarlo) o, si no hay, monograma
+    const rightBlockX = W - M - 62; // a partir de aquí van "PRESUPUESTO", el número y la fecha
+    const logoDrawn = settings.logo ? this.drawLogo(doc, settings.logo, M, 14, Math.min(64, rightBlockX - M - 4), 22) : null;
+    if (!logoDrawn) {
+      doc.setFillColor(...ROSE);
+      doc.circle(M + 9, 25.5, 9, 'F');
+      doc.setTextColor(255, 255, 255).setFont('times', 'bolditalic').setFontSize(16);
+      doc.text(studio.name.trim().charAt(0).toUpperCase() || 'A', M + 9, 28, { align: 'center' });
+    }
 
     // Nº y fecha
     doc.setTextColor(...ROSE).setFont('times', 'bold').setFontSize(20);
-    doc.text('PRESUPUESTO', W - M, 20, { align: 'right' });
+    doc.text('PRESUPUESTO', W - M, 21, { align: 'right' });
     doc.setTextColor(...INK).setFont('helvetica', 'normal').setFontSize(9);
-    doc.text(`Nº ${quote.quoteNumber}`, W - M, 27, { align: 'right' });
-    doc.text(`Fecha de emisión: ${fmtDate(quote.createdAt)}`, W - M, 32, { align: 'right' });
+    doc.text(`Nº ${quote.quoteNumber}`, W - M, 28.5, { align: 'right' });
+    doc.text(`Fecha de emisión: ${fmtDate(quote.createdAt)}`, W - M, 34, { align: 'right' });
 
     doc.setDrawColor(...ROSE).setLineWidth(0.5).line(M, 40, W - M, 40);
 
     // Proveedoras (datos fiscales y de contacto de cada una)
     const colW = (W - 2 * M) / 2;
-    let provBottom = 46;
+    // Datos del estudio bajo la línea: nombre en negrita y, a continuación, dirección y email
+    let provTop = 46;
+    doc.setFont('times', 'bold').setFontSize(11).setTextColor(...INK);
+    const nameWidth = doc.getTextWidth(studio.name) + 1.5;
+    doc.text(studio.name, M, provTop);
+    doc.setFont('helvetica', 'normal').setFontSize(8.5).setTextColor(...MUTED);
+    const studioLines: string[] = doc.splitTextToSize(`· ${studio.address} · ${studio.email}`, W - 2 * M - nameWidth);
+    doc.text(studioLines[0], M + nameWidth, provTop);
+    studioLines.slice(1).forEach((l, i) => doc.text(l, M + nameWidth, provTop + 4 * (i + 1)));
+    provTop += 4 * studioLines.length + 7;
+    let provBottom = provTop;
     providers.forEach((pv, idx) => {
       const x = M + idx * colW;
-      let y = 46;
+      let y = provTop;
       doc.setFont('times', 'bold').setFontSize(11).setTextColor(...INK).text(pv.name, x, y);
       y += 4.8;
       doc.setFont('helvetica', 'normal').setFontSize(8.5).setTextColor(...MUTED);
@@ -128,12 +155,26 @@ export class PdfGeneratorService {
       eur(this.calc.lineTotal(i)),
     ]);
     const footCells = head.length - 1;
+    const eb = quote.earlyBooking;
+    const earlyPrice = eb ? this.calc.earlyBookingPrice(quote.totalAmount, eb.percent) : 0;
 
     autoTable(doc, {
       startY: Math.max(clientBottom, eventBottom) + 4,
       head: [head],
       body,
-      foot: [[{ content: 'Total presupuesto', colSpan: footCells, styles: { halign: 'right' } }, { content: eur(quote.totalAmount), styles: { halign: 'right' } }]],
+      foot: [
+        [{ content: 'Total presupuesto', colSpan: footCells, styles: { halign: 'right' } }, { content: eur(quote.totalAmount), styles: { halign: 'right' } }],
+        ...(eb
+          ? [[
+              {
+                content: `Con reserva temprana (-${num(eb.percent)} %) antes del ${fmtDate(eb.deadline)}`,
+                colSpan: footCells,
+                styles: { halign: 'right' as const, fillColor: ROSE, textColor: [255, 255, 255] as [number, number, number], fontSize: 10 },
+              },
+              { content: eur(earlyPrice), styles: { halign: 'right' as const, fillColor: ROSE, textColor: [255, 255, 255] as [number, number, number] } },
+            ]]
+          : []),
+      ],
       theme: 'plain',
       styles: { fontSize: 9.5, cellPadding: 3, textColor: INK },
       headStyles: { fillColor: ROSE, textColor: 255, fontStyle: 'bold' },
@@ -165,6 +206,9 @@ export class PdfGeneratorService {
     section('Condiciones de reserva y pago', [
       '• Pago del 40% por adelantado para la confirmación de la reserva.',
       '• Pago del 60% restante la semana anterior al evento, o en efectivo el mismo día del evento (bajo petición previa).',
+      ...(eb
+        ? [`• Descuento por reserva temprana: ${num(eb.percent)} % de descuento sobre el total (${eur(earlyPrice)} en lugar de ${eur(quote.totalAmount)}) si la reserva se confirma antes del ${fmtDate(eb.deadline)}. Pasada esa fecha se aplica el precio total.`]
+        : []),
       ...paymentLines(providers),
     ]);
     if (settings.pdfObservations?.trim()) {

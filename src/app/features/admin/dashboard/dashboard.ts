@@ -2,13 +2,14 @@ import { Component, computed, inject, signal, ChangeDetectionStrategy } from '@a
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
 import { Quote, QuoteStatus } from '../../../core/models';
-import { FirebaseService } from '../../../core/services/firebase.service';
+import { DateBlockedError, FirebaseService } from '../../../core/services/firebase.service';
+import { DatePicker } from '../../../shared/components/date-picker';
 import { EuroCurrencyPipe, EventTypePipe } from '../../../shared/pipes/pipes';
 
 @Component({
   selector: 'app-dashboard',
   standalone: true,
-  imports: [FormsModule, RouterLink, EuroCurrencyPipe, EventTypePipe],
+  imports: [FormsModule, RouterLink, DatePicker, EuroCurrencyPipe, EventTypePipe],
   changeDetection: ChangeDetectionStrategy.Eager,
   template: `
     <h1 class="text-3xl font-semibold">Presupuestos</h1>
@@ -25,11 +26,11 @@ import { EuroCurrencyPipe, EventTypePipe } from '../../../shared/pipes/pipes';
       </div>
       <div>
         <label class="label" for="from">Evento desde</label>
-        <input id="from" type="date" class="input" [ngModel]="from()" (ngModelChange)="from.set($event)" />
+        <app-date-picker inputId="from" placeholder="Cualquiera" [clearable]="true" [ngModel]="from()" (ngModelChange)="from.set($event)" />
       </div>
       <div>
         <label class="label" for="to">Evento hasta</label>
-        <input id="to" type="date" class="input" [ngModel]="to()" (ngModelChange)="to.set($event)" />
+        <app-date-picker inputId="to" placeholder="Cualquiera" [clearable]="true" [min]="from()" [ngModel]="to()" (ngModelChange)="to.set($event)" />
       </div>
       <button type="button" class="btn-secondary" (click)="clear()">Limpiar</button>
     </div>
@@ -112,7 +113,10 @@ export class Dashboard {
   constructor() {
     this.firebase
       .getQuotes()
-      .then((q) => this.quotes.set(q))
+      .then((q) => {
+        this.quotes.set(q);
+        this.firebase.syncAcceptedBlocks(q).catch(() => {}); // asegura el bloqueo de los aceptados previos
+      })
       .catch(() => this.error.set('No se pudieron cargar los presupuestos.'))
       .finally(() => this.loading.set(false));
   }
@@ -124,10 +128,14 @@ export class Dashboard {
     this.updating.set(q.id);
     this.statusError.set('');
     try {
-      await this.firebase.updateStatus(q.id, status);
-    } catch {
+      await this.firebase.updateStatus(q, status);
+    } catch (err) {
       this.setStatus(q.id, previous); // revierte si Firestore rechaza el cambio
-      this.statusError.set('No se pudo actualizar el estado.');
+      this.statusError.set(
+        err instanceof DateBlockedError
+          ? 'No se puede aceptar: esa fecha ya está bloqueada por otro presupuesto aceptado o por un bloqueo manual.'
+          : 'No se pudo actualizar el estado.',
+      );
     } finally {
       this.updating.set(null);
     }
