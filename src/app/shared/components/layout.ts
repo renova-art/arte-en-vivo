@@ -1,5 +1,6 @@
 import { Component, input, output, ChangeDetectionStrategy } from '@angular/core';
 import { RouterLink } from '@angular/router';
+import { SHOW_PORTFOLIO } from '../../core/config/defaults';
 import { QuoteStatus } from '../../core/models';
 
 @Component({
@@ -10,17 +11,21 @@ import { QuoteStatus } from '../../core/models';
   template: `
     <header class="sticky top-0 z-30 border-b border-cream-200 bg-cream-50/90 backdrop-blur">
       <div class="mx-auto flex max-w-6xl items-center justify-between px-4 py-3">
-        <a routerLink="/" class="font-serif text-2xl font-semibold text-ink-900">Trazos <span class="text-blush-400">en vivo</span></a>
+        <a routerLink="/" class="font-serif text-2xl font-semibold text-ink-900">Arte <span class="text-blush-400">en vivo</span></a>
         <nav class="flex items-center gap-5 text-sm">
           <a routerLink="/" fragment="servicios" class="hidden text-ink-500 hover:text-ink-900 sm:inline">Servicios</a>
-          <a routerLink="/" fragment="portfolio" class="hidden text-ink-500 hover:text-ink-900 sm:inline">Portafolio</a>
+          @if (showPortfolio) {
+            <a routerLink="/" fragment="portfolio" class="hidden text-ink-500 hover:text-ink-900 sm:inline">Portafolio</a>
+          }
           <a routerLink="/solicitar-presupuesto" class="btn-primary !py-2">Pedir presupuesto</a>
         </nav>
       </div>
     </header>
   `,
 })
-export class Header {}
+export class Header {
+  readonly showPortfolio = SHOW_PORTFOLIO;
+}
 
 @Component({
   selector: 'app-footer',
@@ -29,7 +34,7 @@ export class Header {}
   changeDetection: ChangeDetectionStrategy.Eager,
   template: `
     <footer class="mt-16 border-t border-cream-200 bg-cream-100 py-8 text-center text-sm text-ink-500">
-      <p class="font-serif text-lg text-ink-900">Trazos en vivo</p>
+      <p class="font-serif text-lg text-ink-900">Arte en vivo</p>
       <p class="mt-1">Ilustraciones en directo para tus momentos especiales.</p>
       <p class="mt-3"><a routerLink="/admin" class="text-xs hover:text-ink-900">Acceso administración</a></p>
     </footer>

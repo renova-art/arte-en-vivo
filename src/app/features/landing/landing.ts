@@ -1,5 +1,6 @@
 import { Component, ChangeDetectionStrategy } from '@angular/core';
 import { RouterLink } from '@angular/router';
+import { SHOW_PORTFOLIO } from '../../core/config/defaults';
 import { Footer, Header } from '../../shared/components/layout';
 
 @Component({
@@ -46,21 +47,20 @@ import { Footer, Header } from '../../shared/components/layout';
               </li>
             }
           </ol>
-          <p class="mx-auto mt-10 max-w-xl rounded-xl bg-white p-4 text-center text-sm text-ink-500">
-            Capacidad máxima: 10 ilustraciones/hora. Las ilustraciones pueden ser individuales, en pareja o en grupos de máximo 4 personas.
-          </p>
         </div>
       </section>
 
-      <section id="portfolio" class="mx-auto max-w-6xl px-4 py-16">
-        <h2 class="text-center text-3xl font-semibold sm:text-4xl">Portafolio</h2>
-        <p class="mt-2 text-center text-sm text-ink-500">Sustituye estos marcos por tus ilustraciones en <code>public/portfolio</code>.</p>
-        <div class="mt-8 grid grid-cols-2 gap-4 md:grid-cols-3">
-          @for (g of gallery; track $index) {
-            <div class="flex aspect-square items-center justify-center rounded-2xl text-5xl" [class]="g">✎</div>
-          }
-        </div>
-      </section>
+      @if (showPortfolio) {
+        <section id="portfolio" class="mx-auto max-w-6xl px-4 py-16">
+          <h2 class="text-center text-3xl font-semibold sm:text-4xl">Portafolio</h2>
+          <p class="mt-2 text-center text-sm text-ink-500">Sustituye estos marcos por tus ilustraciones en <code>public/portfolio</code>.</p>
+          <div class="mt-8 grid grid-cols-2 gap-4 md:grid-cols-3">
+            @for (g of gallery; track $index) {
+              <div class="flex aspect-square items-center justify-center rounded-2xl text-5xl" [class]="g">✎</div>
+            }
+          </div>
+        </section>
+      }
 
       <section class="px-4 py-16 text-center">
         <h2 class="text-3xl font-semibold sm:text-4xl">¿Hablamos de tu evento?</h2>
@@ -72,6 +72,7 @@ import { Footer, Header } from '../../shared/components/layout';
   `,
 })
 export class Landing {
+  readonly showPortfolio = SHOW_PORTFOLIO;
   services = [
     { icon: '💍', title: 'Bodas', text: 'Un detalle único que tus invitados se llevarán a casa.' },
     { icon: '🕊️', title: 'Bautizos', text: 'Recuerdos delicados de un día muy especial.' },

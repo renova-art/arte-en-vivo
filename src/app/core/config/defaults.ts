@@ -5,6 +5,9 @@ export const SETTINGS_DOC = 'general';
 export const QUOTES_COLLECTION = 'quotes';
 export const COUNTERS_COLLECTION = 'counters';
 
+// Pon a true cuando haya fotos en el portafolio.
+export const SHOW_PORTFOLIO = false;
+
 export const MIN_HOURS = 2;
 export const MAX_HOURS = 6;
 export const MAX_ILLUSTRATIONS_PER_HOUR = 10;

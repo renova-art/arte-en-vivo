@@ -8,6 +8,7 @@ import { AppSettings, EventType } from '../../core/models';
 import { FirebaseService } from '../../core/services/firebase.service';
 import { QuoteCalculatorService } from '../../core/services/quote-calculator.service';
 import { Footer, Header, Modal } from '../../shared/components/layout';
+import { LegalKind, LegalModal } from '../../shared/components/legal-modal';
 import { EuroCurrencyPipe } from '../../shared/pipes/pipes';
 
 const todayIso = () => new Date().toISOString().slice(0, 10);
@@ -19,7 +20,7 @@ function futureDate(c: AbstractControl): ValidationErrors | null {
 @Component({
   selector: 'app-quote-form',
   standalone: true,
-  imports: [ReactiveFormsModule, Header, Footer, Modal, EuroCurrencyPipe],
+  imports: [ReactiveFormsModule, Header, Footer, Modal, LegalModal, EuroCurrencyPipe],
   changeDetection: ChangeDetectionStrategy.Eager,
   template: `
     <app-header />
@@ -109,11 +110,11 @@ function futureDate(c: AbstractControl): ValidationErrors | null {
           <div class="space-y-3 text-sm">
             <label class="flex items-start gap-3">
               <input type="checkbox" class="mt-1 accent-blush-400" formControlName="termsAccepted" />
-              <span>Acepto los Términos y Condiciones. *</span>
+              <span>Acepto los <button type="button" class="text-blush-500 underline hover:text-blush-400" (click)="openLegal('terms', $event)">Términos y Condiciones</button>. *</span>
             </label>
             <label class="flex items-start gap-3">
               <input type="checkbox" class="mt-1 accent-blush-400" formControlName="privacyAccepted" />
-              <span>Acepto la política de protección de datos (LOPD y RGPD). *</span>
+              <span>Acepto la <button type="button" class="text-blush-500 underline hover:text-blush-400" (click)="openLegal('privacy', $event)">política de protección de datos (LOPD y RGPD)</button>. *</span>
             </label>
             @if (bad('termsAccepted') || bad('privacyAccepted')) {
               <p class="error">Debes aceptar ambas casillas para continuar.</p>
@@ -134,6 +135,10 @@ function futureDate(c: AbstractControl): ValidationErrors | null {
       </form>
     </main>
     <app-footer />
+
+    @if (legal(); as kind) {
+      <app-legal-modal [kind]="kind" [provider]="settings().provider" (closed)="legal.set(null)" />
+    }
 
     @if (sentNumber()) {
       <app-modal buttonLabel="Volver al inicio" (closed)="finish()">
@@ -161,6 +166,7 @@ export class QuoteForm {
   readonly sending = signal(false);
   readonly error = signal('');
   readonly sentNumber = signal('');
+  readonly legal = signal<LegalKind | null>(null);
 
   readonly form = this.fb.nonNullable.group({
     type: ['boda' as EventType],
@@ -196,6 +202,11 @@ export class QuoteForm {
       c.setValidators(t === 'especial' ? Validators.required : null);
       c.updateValueAndValidity();
     });
+  }
+
+  openLegal(kind: LegalKind, event: Event) {
+    event.preventDefault(); // evita marcar/desmarcar el checkbox del label
+    this.legal.set(kind);
   }
 
   bad(name: keyof typeof this.form.controls): boolean {
