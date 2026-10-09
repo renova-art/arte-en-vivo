@@ -4,19 +4,27 @@ export interface PricingTier {
   pricePerHour: number;
 }
 
-export interface ProviderInfo {
+/** Datos comunes del estudio (aparecen una sola vez en el PDF). */
+export interface StudioInfo {
   name: string;
-  cifNif: string;
-  email: string;
-  phone: string;
   address: string;
-  bankAccount: string;
+  email: string; // Email común de contacto
+}
+
+/** Cada proveedora (persona) que presta el servicio. */
+export interface ProviderPerson {
+  name: string;
+  nif: string;
+  phone: string;
+  bizum: boolean;      // El teléfono admite Bizum
+  bankAccount: string; // Opcional ('' si no hay)
 }
 
 export interface AppSettings {
   initialQuoteNumber: number;
   currentYear: number;
-  provider: ProviderInfo;
+  studio: StudioInfo;
+  providers: ProviderPerson[]; // Las dos proveedoras
   pricingTiers: PricingTier[];
   pdfObservations: string;
 }
@@ -43,12 +51,25 @@ export interface EventDetails {
   description?: string;
 }
 
+export type DiscountType = 'percent' | 'amount';
+
+/** Línea de concepto de un presupuesto: unidades × precio unitario, con descuento opcional. */
+export interface QuoteLineItem {
+  id: string;
+  concept: string;
+  units: number;
+  unitPrice: number;
+  discount: number; // % (0-100) o € según discountType
+  discountType: DiscountType;
+}
+
 export interface Quote {
   id?: string;
   quoteNumber: string;
   createdAt: Date | string;
   client: ClientData;
   event: EventDetails;
+  lineItems?: QuoteLineItem[];    // Si falta, se derivan de los campos económicos
   appliedHourlyRate: number;
   subtotalHours: number;
   travelCost: number;

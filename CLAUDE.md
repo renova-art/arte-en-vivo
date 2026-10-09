@@ -53,19 +53,27 @@ export interface PricingTier {
   pricePerHour: number;     // Por defecto: <=100 -> 150€, 101-150 -> 160€, >150 -> 170€
 }
 
-export interface ProviderInfo {
+/** Datos comunes del estudio (aparecen una sola vez en el PDF). */
+export interface StudioInfo {
   name: string;
-  cifNif: string;
-  email: string;
+  address: string; // Dirección genérica y única (la del estudio)
+  email: string;   // Email común de contacto
+}
+
+/** Cada proveedora (son dos, trabajan juntas). */
+export interface ProviderPerson {
+  name: string;
+  nif: string;
   phone: string;
-  address: string;
-  bankAccount: string; // Para el pago de la reserva
+  bizum: boolean;      // El teléfono admite Bizum
+  bankAccount: string; // Opcional ('' si no hay)
 }
 
 export interface AppSettings {
   initialQuoteNumber: number; // Ej: 1 (se reinicia o formatea según año ej: PRES-2026-001)
   currentYear: number;
-  provider: ProviderInfo;
+  studio: StudioInfo;
+  providers: ProviderPerson[]; // Las dos proveedoras
   pricingTiers: PricingTier[];
   pdfObservations: string;   // Texto libre de observaciones legales o informativas
 }

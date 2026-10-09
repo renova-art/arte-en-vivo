@@ -24,12 +24,12 @@ function futureDate(c: AbstractControl): ValidationErrors | null {
   changeDetection: ChangeDetectionStrategy.Eager,
   template: `
     <app-header />
-    <main class="mx-auto max-w-3xl px-4 py-10">
+    <main class="mx-auto max-w-3xl px-4 py-6">
       <h1 class="text-3xl font-semibold sm:text-4xl">Solicita tu presupuesto</h1>
-      <p class="mt-2 text-ink-500">Cuéntanos cómo será tu evento y te enviaremos una propuesta.</p>
+      <p class="mt-1 text-ink-500">Cuéntanos cómo será tu evento y te enviaremos una propuesta.</p>
 
-      <form [formGroup]="form" (ngSubmit)="submit()" class="mt-8 space-y-8" novalidate>
-        <section class="card space-y-5">
+      <form [formGroup]="form" (ngSubmit)="submit()" class="mt-5 space-y-4" novalidate>
+        <section class="card space-y-4 !p-5">
           <h2 class="text-2xl font-semibold">Tu evento</h2>
 
           <div>
@@ -47,23 +47,22 @@ function futureDate(c: AbstractControl): ValidationErrors | null {
             </div>
           }
 
-          <div class="grid gap-5 sm:grid-cols-2">
-            <div>
+          <div class="grid gap-4 sm:grid-cols-2">
+            <div class="order-1">
               <label class="label" for="date">Fecha del evento *</label>
               <input id="date" type="date" class="input" [class.invalid]="bad('date')" [min]="today" formControlName="date" />
               @if (bad('date')) { <p class="error">{{ form.controls.date.errors?.['past'] ? 'La fecha no puede ser pasada.' : 'Indica la fecha.' }}</p> }
             </div>
-            <div>
+            <div class="order-3 sm:order-2">
               <label class="label" for="guests">Número de invitados *</label>
               <input id="guests" type="number" min="1" class="input" [class.invalid]="bad('guestCount')" formControlName="guestCount" />
               @if (bad('guestCount')) { <p class="error">Indica al menos 1 invitado.</p> }
             </div>
-          </div>
-
-          <div>
-            <label class="label" for="location">Lugar del evento *</label>
-            <input id="location" class="input" [class.invalid]="bad('location')" formControlName="location" placeholder="Ciudad / finca / restaurante" />
-            @if (bad('location')) { <p class="error">Indica el lugar.</p> }
+            <div class="order-2 sm:order-3 sm:col-span-2">
+              <label class="label" for="location">Lugar del evento *</label>
+              <input id="location" class="input" [class.invalid]="bad('location')" formControlName="location" placeholder="Ciudad / finca / restaurante" />
+              @if (bad('location')) { <p class="error">Indica el lugar.</p> }
+            </div>
           </div>
 
           <div>
@@ -87,14 +86,14 @@ function futureDate(c: AbstractControl): ValidationErrors | null {
           </div>
         </section>
 
-        <section class="card space-y-5">
+        <section class="card space-y-4 !p-5">
           <h2 class="text-2xl font-semibold">Tus datos</h2>
           <div>
             <label class="label" for="name">Nombre y apellidos *</label>
             <input id="name" class="input" autocomplete="name" [class.invalid]="bad('fullName')" formControlName="fullName" />
             @if (bad('fullName')) { <p class="error">Indica tu nombre y apellidos.</p> }
           </div>
-          <div class="grid gap-5 sm:grid-cols-2">
+          <div class="grid gap-4 sm:grid-cols-2">
             <div>
               <label class="label" for="phone">Teléfono *</label>
               <input id="phone" type="tel" class="input" autocomplete="tel" [class.invalid]="bad('phone')" formControlName="phone" />
@@ -110,11 +109,11 @@ function futureDate(c: AbstractControl): ValidationErrors | null {
           <div class="space-y-3 text-sm">
             <label class="flex items-start gap-3">
               <input type="checkbox" class="mt-1 accent-blush-400" formControlName="termsAccepted" />
-              <span>Acepto los <button type="button" class="text-blush-500 underline hover:text-blush-400" (click)="openLegal('terms', $event)">Términos y Condiciones</button>. *</span>
+              <span>Acepto los <a href="#" role="button" class="text-blush-500 underline hover:text-blush-400" (click)="openLegal('terms', $event)">Términos y Condiciones</a>. *</span>
             </label>
             <label class="flex items-start gap-3">
               <input type="checkbox" class="mt-1 accent-blush-400" formControlName="privacyAccepted" />
-              <span>Acepto la <button type="button" class="text-blush-500 underline hover:text-blush-400" (click)="openLegal('privacy', $event)">política de protección de datos (LOPD y RGPD)</button>. *</span>
+              <span>Acepto la <a href="#" role="button" class="text-blush-500 underline hover:text-blush-400" (click)="openLegal('privacy', $event)">política de protección de datos (LOPD y RGPD)</a>. *</span>
             </label>
             @if (bad('termsAccepted') || bad('privacyAccepted')) {
               <p class="error">Debes aceptar ambas casillas para continuar.</p>
@@ -122,7 +121,7 @@ function futureDate(c: AbstractControl): ValidationErrors | null {
           </div>
         </section>
 
-        <section class="rounded-2xl bg-blush-100 p-6 text-center">
+        <section class="rounded-2xl bg-blush-100 p-4 text-center">
           <p class="text-sm text-ink-500">Estimación orientativa ({{ rate() }} €/h)</p>
           <p class="font-serif text-4xl font-semibold text-ink-900">{{ estimate() | euro }}</p>
           <p class="mt-1 text-xs text-ink-500">Sin incluir desplazamiento. El presupuesto definitivo lo confirmaremos nosotros.</p>
@@ -137,7 +136,7 @@ function futureDate(c: AbstractControl): ValidationErrors | null {
     <app-footer />
 
     @if (legal(); as kind) {
-      <app-legal-modal [kind]="kind" [provider]="settings().provider" (closed)="legal.set(null)" />
+      <app-legal-modal [kind]="kind" [settings]="settings()" (closed)="legal.set(null)" />
     }
 
     @if (sentNumber()) {

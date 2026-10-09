@@ -3,13 +3,12 @@ import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
 import { Quote, QuoteStatus } from '../../../core/models';
 import { FirebaseService } from '../../../core/services/firebase.service';
-import { StatusBadge } from '../../../shared/components/layout';
 import { EuroCurrencyPipe, EventTypePipe } from '../../../shared/pipes/pipes';
 
 @Component({
   selector: 'app-dashboard',
   standalone: true,
-  imports: [FormsModule, RouterLink, StatusBadge, EuroCurrencyPipe, EventTypePipe],
+  imports: [FormsModule, RouterLink, EuroCurrencyPipe, EventTypePipe],
   changeDetection: ChangeDetectionStrategy.Eager,
   template: `
     <h1 class="text-3xl font-semibold">Presupuestos</h1>
@@ -34,6 +33,8 @@ import { EuroCurrencyPipe, EventTypePipe } from '../../../shared/pipes/pipes';
       </div>
       <button type="button" class="btn-secondary" (click)="clear()">Limpiar</button>
     </div>
+
+    @if (statusError()) { <p class="error mt-3">{{ statusError() }}</p> }
 
     <div class="card mt-6 overflow-x-auto !p-0">
       @if (loading()) {
@@ -60,7 +61,20 @@ import { EuroCurrencyPipe, EventTypePipe } from '../../../shared/pipes/pipes';
                 <td class="px-4 py-3">{{ q.event.type | eventType }}</td>
                 <td class="px-4 py-3 text-right">{{ q.event.guestCount }}</td>
                 <td class="px-4 py-3 text-right">{{ q.totalAmount | euro }}</td>
-                <td class="px-4 py-3"><app-status-badge [status]="q.status" /></td>
+                <td class="px-4 py-3">
+                  <select
+                    class="rounded-full border-0 py-1 pl-3 pr-7 text-xs font-medium focus:ring-2 focus:ring-blush-200"
+                    [class]="statusClass[q.status]"
+                    [attr.aria-label]="'Estado de ' + q.quoteNumber"
+                    [disabled]="updating() === q.id"
+                    [ngModel]="q.status"
+                    (ngModelChange)="changeStatus(q, $event)"
+                  >
+                    <option value="pendiente">Pendiente</option>
+                    <option value="aceptado">Aceptado</option>
+                    <option value="rechazado">Rechazado</option>
+                  </select>
+                </td>
               </tr>
             }
           </tbody>
@@ -76,6 +90,13 @@ export class Dashboard {
   readonly loading = signal(true);
   readonly error = signal('');
   readonly status = signal<QuoteStatus | ''>('');
+  readonly updating = signal<string | null>(null);
+  readonly statusError = signal('');
+  readonly statusClass: Record<QuoteStatus, string> = {
+    pendiente: 'bg-amber-100 text-amber-800',
+    aceptado: 'bg-sage-100 text-sage-500',
+    rechazado: 'bg-red-100 text-red-700',
+  };
   readonly from = signal('');
   readonly to = signal('');
 
@@ -94,6 +115,26 @@ export class Dashboard {
       .then((q) => this.quotes.set(q))
       .catch(() => this.error.set('No se pudieron cargar los presupuestos.'))
       .finally(() => this.loading.set(false));
+  }
+
+  async changeStatus(q: Quote, status: QuoteStatus) {
+    if (!q.id || status === q.status) return;
+    const previous = q.status;
+    this.setStatus(q.id, status);
+    this.updating.set(q.id);
+    this.statusError.set('');
+    try {
+      await this.firebase.updateStatus(q.id, status);
+    } catch {
+      this.setStatus(q.id, previous); // revierte si Firestore rechaza el cambio
+      this.statusError.set('No se pudo actualizar el estado.');
+    } finally {
+      this.updating.set(null);
+    }
+  }
+
+  private setStatus(id: string, status: QuoteStatus) {
+    this.quotes.update((list) => list.map((x) => (x.id === id ? { ...x, status } : x)));
   }
 
   clear() {

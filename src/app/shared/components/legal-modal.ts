@@ -1,6 +1,6 @@
 import { Component, HostListener, computed, input, output } from '@angular/core';
 import { MAX_ILLUSTRATIONS_PER_HOUR } from '../../core/config/defaults';
-import { ProviderInfo } from '../../core/models';
+import { AppSettings } from '../../core/models';
 
 export type LegalKind = 'terms' | 'privacy';
 
@@ -30,7 +30,7 @@ interface Section {
             <section>
               <h3 class="mb-1 font-sans text-base font-semibold text-ink-900">{{ s.title }}</h3>
               @for (p of s.paragraphs; track $index) {
-                <p class="mt-2">{{ p }}</p>
+                <p class="mt-2">@for (part of parts(p); track $index) {@if (part.bold) {<strong class="font-semibold text-ink-900">{{ part.text }}</strong>} @else {{{ part.text }}}}</p>
               }
             </section>
           }
@@ -45,7 +45,7 @@ interface Section {
 })
 export class LegalModal {
   kind = input.required<LegalKind>();
-  provider = input.required<ProviderInfo>();
+  settings = input.required<AppSettings>();
   closed = output<void>();
 
   readonly updated = new Date().toLocaleDateString('es-ES', { month: 'long', year: 'numeric' });
@@ -55,16 +55,33 @@ export class LegalModal {
     this.closed.emit();
   }
 
+  /** Divide el texto en tramos; lo marcado como **así** se muestra en negrita. */
+  parts(text: string): { text: string; bold: boolean }[] {
+    return text.split('**').map((t, i) => ({ text: t, bold: i % 2 === 1 })).filter((x) => x.text);
+  }
+
   title = computed(() => (this.kind() === 'terms' ? 'Términos y Condiciones' : 'Política de Protección de Datos (RGPD y LOPDGDD)'));
-  sections = computed(() => (this.kind() === 'terms' ? termsSections(this.provider()) : privacySections(this.provider())));
+  sections = computed(() => (this.kind() === 'terms' ? termsSections(this.settings()) : privacySections(this.settings())));
 }
 
-function termsSections(p: ProviderInfo): Section[] {
+/** Datos de identificación a partir de la configuración (estudio y proveedoras). */
+function identity({ studio, providers }: AppSettings) {
+  const bold = (t: string) => `**${t}**`;
+  return {
+    studioName: bold(studio.name),
+    address: bold(studio.address),
+    email: bold(studio.email),
+    ids: providers.map((x) => bold(x.name)).join(' y '),
+  };
+}
+
+function termsSections(settings: AppSettings): Section[] {
+  const p = identity(settings);
   return [
     {
       title: '1. Identificación del prestador',
       paragraphs: [
-        `El servicio de ilustración en vivo es prestado por ${p.name}, con NIF/CIF ${p.cifNif} y domicilio en ${p.address} (en adelante, «el Prestador»). Contacto: ${p.email} · ${p.phone}.`,
+        `El servicio de ilustración en vivo es prestado conjuntamente por ${p.ids}, bajo el nombre comercial «${p.studioName}», con domicilio en ${p.address} (en adelante, «el Estudio»). Para cualquier consulta o gestión, el único canal de contacto es el correo electrónico ${p.email}.`,
         'Estos Términos y Condiciones regulan la solicitud de presupuestos a través de este sitio web y la contratación del servicio por parte de la persona que los solicita (en adelante, «el Cliente»).',
       ],
     },
@@ -85,35 +102,35 @@ function termsSections(p: ProviderInfo): Section[] {
     {
       title: '4. Reserva, pago y facturación',
       paragraphs: [
-        'La reserva de la fecha se confirma con el pago del 40 % del importe total del presupuesto. El 60 % restante deberá abonarse la semana anterior al evento o, previa petición y aceptación expresa del Prestador, en efectivo el mismo día del evento.',
+        'La reserva de la fecha se confirma con el pago del 40 % del importe total del presupuesto. El 60 % restante deberá abonarse la semana anterior al evento o, previa petición y aceptación expresa del Estudio, en efectivo el mismo día del evento.',
         'Los pagos se realizarán por transferencia bancaria a la cuenta indicada en el presupuesto. Hasta la recepción del pago de la reserva, la fecha no queda garantizada.',
       ],
     },
     {
       title: '5. Modificaciones y cancelación',
       paragraphs: [
-        'El Cliente podrá solicitar cambios de fecha, horario o duración, que quedarán sujetos a la disponibilidad del Prestador y a su confirmación por escrito.',
+        'El Cliente podrá solicitar cambios de fecha, horario o duración, que quedarán sujetos a la disponibilidad del Estudio y a su confirmación por escrito.',
         'Las condiciones aplicables en caso de cancelación, incluida la eventual devolución de la cantidad abonada como reserva, serán las que figuren en el presupuesto aceptado o se pacten por escrito entre las partes. De acuerdo con el artículo 103.l) del Real Decreto Legislativo 1/2007 (Ley General para la Defensa de los Consumidores y Usuarios), los servicios de ocio que deben prestarse en una fecha o periodo determinados no están sujetos al derecho de desistimiento de catorce días.',
       ],
     },
     {
       title: '6. Obligaciones del Cliente',
       paragraphs: [
-        'El Cliente se compromete a facilitar información veraz sobre el evento, a garantizar un espacio adecuado y seguro para el desarrollo del servicio y a informar al Prestador de cualquier circunstancia que pueda afectarlo (cambios de lugar u horario, restricciones de acceso, etc.).',
+        'El Cliente se compromete a facilitar información veraz sobre el evento, a garantizar un espacio adecuado y seguro para el desarrollo del servicio y a informar al Estudio de cualquier circunstancia que pueda afectarlo (cambios de lugar u horario, restricciones de acceso, etc.).',
       ],
     },
     {
       title: '7. Propiedad intelectual y derechos de imagen',
       paragraphs: [
-        'Las ilustraciones son obras originales protegidas por el Real Decreto Legislativo 1/1996 (Ley de Propiedad Intelectual). Los derechos de autor corresponden al Prestador. Quien reciba una ilustración podrá conservarla y usarla con fines personales y no comerciales, y compartirla en redes sociales citando al autor.',
-        'Cualquier otro uso (comercial, publicitario, reproducción masiva, etc.) requiere autorización escrita del Prestador.',
-        'El Prestador podrá mostrar las ilustraciones realizadas en su portafolio y redes sociales como muestra de su trabajo, salvo que el Cliente manifieste por escrito su oposición. No se publicarán datos personales identificativos sin consentimiento.',
+        'Las ilustraciones son obras originales protegidas por el Real Decreto Legislativo 1/1996 (Ley de Propiedad Intelectual). Los derechos de autor corresponden al Estudio. Quien reciba una ilustración podrá conservarla y usarla con fines personales y no comerciales, y compartirla en redes sociales citando al autor.',
+        'Cualquier otro uso (comercial, publicitario, reproducción masiva, etc.) requiere autorización escrita del Estudio.',
+        'El Estudio podrá mostrar las ilustraciones realizadas en su portafolio y redes sociales como muestra de su trabajo, salvo que el Cliente manifieste por escrito su oposición. No se publicarán datos personales identificativos sin consentimiento.',
       ],
     },
     {
       title: '8. Responsabilidad y fuerza mayor',
       paragraphs: [
-        'El Prestador responderá de la correcta prestación del servicio conforme al presupuesto aceptado. No será responsable del incumplimiento o retraso causado por circunstancias de fuerza mayor o ajenas a su control (enfermedad grave, accidente, fenómenos meteorológicos extremos, restricciones de las autoridades u otras causas semejantes), en cuyo caso las partes acordarán un cambio de fecha o la solución que proceda.',
+        'El Estudio responderá de la correcta prestación del servicio conforme al presupuesto aceptado. No será responsable del incumplimiento o retraso causado por circunstancias de fuerza mayor o ajenas a su control (enfermedad grave, accidente, fenómenos meteorológicos extremos, restricciones de las autoridades u otras causas semejantes), en cuyo caso las partes acordarán un cambio de fecha o la solución que proceda.',
       ],
     },
     {
@@ -125,19 +142,20 @@ function termsSections(p: ProviderInfo): Section[] {
     {
       title: '10. Legislación aplicable y jurisdicción',
       paragraphs: [
-        'Estos Términos se rigen por la legislación española. Si el Cliente tiene la condición de consumidor, serán competentes los juzgados y tribunales de su domicilio. El Cliente dispone de hojas de reclamaciones a su disposición y puede dirigirse al Prestador a través de los datos de contacto indicados para cualquier queja o sugerencia.',
+        'Estos Términos se rigen por la legislación española. Si el Cliente tiene la condición de consumidor, serán competentes los juzgados y tribunales de su domicilio. El Cliente dispone de hojas de reclamaciones a su disposición y puede dirigirse al Estudio a través de los datos de contacto indicados para cualquier queja o sugerencia.',
       ],
     },
   ];
 }
 
-function privacySections(p: ProviderInfo): Section[] {
+function privacySections(settings: AppSettings): Section[] {
+  const p = identity(settings);
   return [
     {
       title: '1. Responsable del tratamiento',
       paragraphs: [
-        `Identidad: ${p.name} · NIF/CIF: ${p.cifNif}`,
-        `Dirección: ${p.address} · Correo electrónico: ${p.email} · Teléfono: ${p.phone}`,
+        `Identidad: ${p.ids}, que actúan conjuntamente como corresponsables del tratamiento (art. 26 RGPD) bajo el nombre comercial «${p.studioName}».`,
+        `Dirección: ${p.address} · Correo electrónico (único canal de contacto): ${p.email}`,
         'De conformidad con el Reglamento (UE) 2016/679 (RGPD) y la Ley Orgánica 3/2018, de Protección de Datos Personales y garantía de los derechos digitales (LOPDGDD), le informamos de cómo tratamos sus datos personales.',
       ],
     },

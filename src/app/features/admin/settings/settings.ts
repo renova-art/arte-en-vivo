@@ -1,6 +1,6 @@
 import { Component, inject, signal, ChangeDetectionStrategy } from '@angular/core';
 import { FormArray, FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
-import { AppSettings } from '../../../core/models';
+import { AppSettings, ProviderPerson } from '../../../core/models';
 import { FirebaseService } from '../../../core/services/firebase.service';
 
 @Component({
@@ -28,15 +28,49 @@ import { FirebaseService } from '../../../core/services/firebase.service';
           <p class="text-xs text-ink-500 sm:col-span-2">Formato: PRES-AÑO-NNN. El contador inicial solo se usa si el año coincide con el año en curso.</p>
         </section>
 
-        <section class="card grid gap-4 sm:grid-cols-2" formGroupName="provider">
-          <h2 class="text-xl font-semibold sm:col-span-2">Datos del proveedor (cabecera del PDF)</h2>
-          @for (f of providerFields; track f.key) {
-            <div [class.sm:col-span-2]="f.wide">
-              <label class="label" [for]="'p-' + f.key">{{ f.label }}</label>
-              <input [id]="'p-' + f.key" class="input" [formControlName]="f.key" />
-            </div>
-          }
+        <section class="card grid gap-4 sm:grid-cols-3" formGroupName="studio">
+          <h2 class="text-xl font-semibold sm:col-span-3">Estudio (datos comunes del PDF)</h2>
+          <div>
+            <label class="label" for="st-name">Nombre del estudio</label>
+            <input id="st-name" class="input" formControlName="name" />
+          </div>
+          <div>
+            <label class="label" for="st-addr">Dirección del estudio</label>
+            <input id="st-addr" class="input" formControlName="address" />
+          </div>
+          <div>
+            <label class="label" for="st-email">Email del estudio</label>
+            <input id="st-email" type="email" class="input" formControlName="email" />
+          </div>
         </section>
+
+        <div formArrayName="providers" class="grid gap-6 lg:grid-cols-2">
+          @for (g of providers.controls; track g; let i = $index) {
+            <section class="card grid gap-4 sm:grid-cols-2" [formGroupName]="i">
+              <h2 class="text-xl font-semibold sm:col-span-2">Proveedora {{ i + 1 }}</h2>
+              <div class="sm:col-span-2">
+                <label class="label" [for]="'pv-name-' + i">Nombre y apellidos</label>
+                <input [id]="'pv-name-' + i" class="input" formControlName="name" />
+              </div>
+              <div>
+                <label class="label" [for]="'pv-nif-' + i">NIF <span class="font-normal text-ink-500">· solo aparece en el PDF del presupuesto</span></label>
+                <input [id]="'pv-nif-' + i" class="input" formControlName="nif" />
+              </div>
+              <div>
+                <label class="label" [for]="'pv-phone-' + i">Teléfono <span class="font-normal text-ink-500">· solo para Bizum</span></label>
+                <input [id]="'pv-phone-' + i" type="tel" class="input" formControlName="phone" />
+              </div>
+              <label class="flex items-center gap-2 self-end pb-2.5 text-sm">
+                <input type="checkbox" class="accent-blush-400" formControlName="bizum" />
+                Bizum en este teléfono
+              </label>
+              <div class="sm:col-span-2">
+                <label class="label" [for]="'pv-iban-' + i">Cuenta bancaria (IBAN) <span class="font-normal text-ink-500">· opcional</span></label>
+                <input [id]="'pv-iban-' + i" class="input" formControlName="bankAccount" />
+              </div>
+            </section>
+          }
+        </div>
 
         <section class="card space-y-3">
           <h2 class="text-xl font-semibold">Tarifas por hora según invitados</h2>
@@ -75,29 +109,22 @@ export class Settings {
   readonly message = signal('');
   readonly isError = signal(false);
 
-  readonly providerFields = [
-    { key: 'name', label: 'Nombre / razón social', wide: false },
-    { key: 'cifNif', label: 'CIF / NIF', wide: false },
-    { key: 'email', label: 'Email', wide: false },
-    { key: 'phone', label: 'Teléfono', wide: false },
-    { key: 'address', label: 'Dirección', wide: true },
-    { key: 'bankAccount', label: 'Cuenta bancaria (IBAN) para la reserva', wide: true },
-  ] as const;
-
   readonly form = this.fb.nonNullable.group({
     initialQuoteNumber: [1, [Validators.required, Validators.min(1)]],
     currentYear: [new Date().getFullYear(), [Validators.required, Validators.min(2000)]],
-    provider: this.fb.nonNullable.group({
+    studio: this.fb.nonNullable.group({
       name: ['', Validators.required],
-      cifNif: ['', Validators.required],
-      email: ['', [Validators.required, Validators.email]],
-      phone: ['', Validators.required],
       address: ['', Validators.required],
-      bankAccount: ['', Validators.required],
+      email: ['', [Validators.required, Validators.email]],
     }),
+    providers: this.fb.array([this.providerGroup(), this.providerGroup()]),
     pricingTiers: this.fb.array([this.tierGroup(0, null, 0)]),
     pdfObservations: [''],
   });
+
+  get providers(): FormArray {
+    return this.form.controls.providers as unknown as FormArray;
+  }
 
   get tiers(): FormArray {
     return this.form.controls.pricingTiers as unknown as FormArray;
@@ -105,15 +132,27 @@ export class Settings {
 
   constructor() {
     this.firebase.getSettings().then((s) => {
+      this.providers.clear();
+      s.providers.forEach((p) => this.providers.push(this.providerGroup(p)));
       this.tiers.clear();
       s.pricingTiers.forEach((t) => this.tiers.push(this.tierGroup(t.minGuests, t.maxGuests, t.pricePerHour)));
       this.form.patchValue({
         initialQuoteNumber: s.initialQuoteNumber,
         currentYear: s.currentYear,
-        provider: s.provider,
+        studio: s.studio,
         pdfObservations: s.pdfObservations,
       });
       this.loading.set(false);
+    });
+  }
+
+  private providerGroup(p?: ProviderPerson) {
+    return this.fb.nonNullable.group({
+      name: [p?.name ?? '', Validators.required],
+      nif: [p?.nif ?? '', Validators.required],
+      phone: [p?.phone ?? ''], // no se publica; solo se usa para Bizum
+      bizum: [p?.bizum ?? false],
+      bankAccount: [p?.bankAccount ?? ''], // opcional
     });
   }
 
@@ -140,6 +179,7 @@ export class Settings {
     const v = this.form.getRawValue();
     const settings: AppSettings = {
       ...v,
+      providers: (v.providers as ProviderPerson[]).map((p) => ({ ...p, bankAccount: p.bankAccount.trim() })),
       pricingTiers: (v.pricingTiers as any[])
         .map((t) => ({
           minGuests: Number(t.minGuests),

@@ -4,7 +4,7 @@ import { EventType } from '../../core/models';
 
 @Pipe({ name: 'euro', standalone: true })
 export class EuroCurrencyPipe implements PipeTransform {
-  private readonly fmt = new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR' });
+  private readonly fmt = new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 });
   transform(value: number | null | undefined): string {
     return this.fmt.format(value ?? 0);
   }

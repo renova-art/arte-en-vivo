@@ -20,8 +20,9 @@ service cloud.firestore {
     }
 
     // Configuración: lectura pública, escritura solo admin.
+    // El documento 'private' (NIF, teléfonos, IBAN) solo lo lee el admin.
     match /settings/{docId} {
-      allow read: if true;
+      allow read: if docId != 'private' || isAdmin();
       allow write: if isAdmin();
     }
 

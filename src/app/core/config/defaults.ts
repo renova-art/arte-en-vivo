@@ -2,6 +2,8 @@ import { AppSettings, EventType } from '../models';
 
 export const SETTINGS_COLLECTION = 'settings';
 export const SETTINGS_DOC = 'general';
+// Datos sensibles de las proveedoras (teléfono, IBAN): solo lectura para el admin.
+export const SETTINGS_PRIVATE_DOC = 'private';
 export const QUOTES_COLLECTION = 'quotes';
 export const COUNTERS_COLLECTION = 'counters';
 
@@ -15,14 +17,15 @@ export const MAX_ILLUSTRATIONS_PER_HOUR = 10;
 export const DEFAULT_SETTINGS: AppSettings = {
   initialQuoteNumber: 1,
   currentYear: new Date().getFullYear(),
-  provider: {
-    name: 'Nombre del proveedor',
-    cifNif: '00000000X',
-    email: 'hola@ejemplo.com',
-    phone: '600 000 000',
+  studio: {
+    name: 'Arte en vivo',
     address: 'Calle Ejemplo 1, 28000 Madrid',
-    bankAccount: 'ES00 0000 0000 0000 0000 0000',
+    email: 'hola@ejemplo.com',
   },
+  providers: [
+    { name: 'Proveedora 1', nif: '00000000X', phone: '600 000 000', bizum: true, bankAccount: '' },
+    { name: 'Proveedora 2', nif: '00000001R', phone: '600 000 001', bizum: false, bankAccount: '' },
+  ],
   pricingTiers: [
     { minGuests: 0, maxGuests: 100, pricePerHour: 150 },
     { minGuests: 101, maxGuests: 150, pricePerHour: 160 },

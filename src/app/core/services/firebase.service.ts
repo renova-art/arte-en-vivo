@@ -20,8 +20,9 @@ import {
   QUOTES_COLLECTION,
   SETTINGS_COLLECTION,
   SETTINGS_DOC,
+  SETTINGS_PRIVATE_DOC,
 } from '../config/defaults';
-import { AppSettings, ClientData, EventDetails, Quote, QuoteStatus } from '../models';
+import { AppSettings, ClientData, EventDetails, ProviderPerson, Quote, QuoteStatus } from '../models';
 import { QuoteCalculatorService } from './quote-calculator.service';
 
 @Injectable({ providedIn: 'root' })
@@ -50,20 +51,55 @@ export class FirebaseService {
     try {
       const snap = await getDoc(doc(this.db, SETTINGS_COLLECTION, SETTINGS_DOC));
       if (!snap.exists()) return structuredClone(DEFAULT_SETTINGS);
-      const data = snap.data() as Partial<AppSettings>;
-      return {
-        ...DEFAULT_SETTINGS,
+      const { provider: legacy, ...data } = snap.data() as Partial<AppSettings> & { provider?: LegacyProvider };
+      const defaults = structuredClone(DEFAULT_SETTINGS);
+      // Migración: antes había un único proveedor con la dirección dentro.
+      const providers = data.providers?.length
+        ? data.providers
+        : legacy
+          ? [{ ...defaults.providers[0], name: legacy.name, nif: legacy.cifNif, phone: legacy.phone, bankAccount: legacy.bankAccount ?? '' }, defaults.providers[1]]
+          : defaults.providers;
+      const merged: AppSettings = {
+        ...defaults,
         ...data,
-        provider: { ...DEFAULT_SETTINGS.provider, ...data.provider },
+        studio: { ...defaults.studio, ...(legacy && { address: legacy.address, email: legacy.email }), ...data.studio },
+        providers: providers.map(({ name, nif, cifNif, phone, bizum, bankAccount }: ProviderPerson & { cifNif?: string }) => ({ name, nif: nif ?? cifNif ?? '', phone, bizum: !!bizum, bankAccount: bankAccount ?? '' })),
         pricingTiers: data.pricingTiers?.length ? data.pricingTiers : DEFAULT_SETTINGS.pricingTiers,
       };
+      return await this.withPrivateData(merged);
     } catch {
       return structuredClone(DEFAULT_SETTINGS);
     }
   }
 
-  saveSettings(settings: AppSettings) {
-    return setDoc(doc(this.db, SETTINGS_COLLECTION, SETTINGS_DOC), settings);
+  /** Añade NIF, teléfono e IBAN desde el documento privado (solo si hay sesión de admin). */
+  private async withPrivateData(settings: AppSettings): Promise<AppSettings> {
+    await this.auth.authStateReady();
+    if (!this.auth.currentUser) return settings;
+    try {
+      const snap = await getDoc(doc(this.db, SETTINGS_COLLECTION, SETTINGS_PRIVATE_DOC));
+      const priv = (snap.data()?.['providers'] ?? []) as Partial<ProviderPerson>[];
+      return {
+        ...settings,
+        providers: settings.providers.map((p, i) => ({
+          ...p,
+          nif: priv[i]?.nif ?? p.nif ?? '', // p.*: formato anterior, aún público
+          phone: priv[i]?.phone ?? p.phone ?? '',
+          bankAccount: priv[i]?.bankAccount ?? p.bankAccount ?? '',
+        })),
+      };
+    } catch {
+      return settings;
+    }
+  }
+
+  /** NIF, teléfono e IBAN van a un documento privado; el público nunca los lee. */
+  async saveSettings(settings: AppSettings) {
+    const publicProviders = settings.providers.map((p) => ({ ...p, nif: '', phone: '', bankAccount: '' }));
+    await setDoc(doc(this.db, SETTINGS_COLLECTION, SETTINGS_PRIVATE_DOC), {
+      providers: settings.providers.map((p) => ({ nif: p.nif, phone: p.phone, bankAccount: p.bankAccount })),
+    });
+    await setDoc(doc(this.db, SETTINGS_COLLECTION, SETTINGS_DOC), { ...settings, providers: publicProviders });
   }
 
   // ---- Quotes ----
@@ -106,13 +142,23 @@ export class FirebaseService {
     return snap.exists() ? { id: snap.id, ...(snap.data() as Quote) } : null;
   }
 
-  updateQuote(id: string, changes: { travelCost: number; totalAmount: number; status: QuoteStatus }) {
-    return updateDoc(doc(this.db, QUOTES_COLLECTION, id), changes);
+  updateQuote(id: string, changes: Partial<Omit<Quote, 'id'>>) {
+    const data = { ...changes, ...(changes.event && { event: stripUndefined(changes.event) }) };
+    return updateDoc(doc(this.db, QUOTES_COLLECTION, id), data);
   }
 
   updateStatus(id: string, status: QuoteStatus) {
     return updateDoc(doc(this.db, QUOTES_COLLECTION, id), { status });
   }
+}
+
+interface LegacyProvider {
+  name: string;
+  cifNif: string;
+  email: string;
+  phone: string;
+  address: string;
+  bankAccount?: string;
 }
 
 function stripUndefined<T extends object>(obj: T): T {

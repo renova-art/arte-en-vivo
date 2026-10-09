@@ -33,7 +33,7 @@ export class Header {
   imports: [RouterLink],
   changeDetection: ChangeDetectionStrategy.Eager,
   template: `
-    <footer class="mt-16 border-t border-cream-200 bg-cream-100 py-8 text-center text-sm text-ink-500">
+    <footer class="mt-8 border-t border-cream-200 bg-cream-100 py-6 text-center text-sm text-ink-500">
       <p class="font-serif text-lg text-ink-900">Arte en vivo</p>
       <p class="mt-1">Ilustraciones en directo para tus momentos especiales.</p>
       <p class="mt-3"><a routerLink="/admin" class="text-xs hover:text-ink-900">Acceso administración</a></p>
