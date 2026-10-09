@@ -45,3 +45,8 @@ Thumbs.db
 
 # Configuración local de Firebase (copia de environment.example.ts)
 /src/environments/environment.ts
+
+# Registros de Firebase CLI
+firebase-debug.log
+*-debug.log
+.firebase/
