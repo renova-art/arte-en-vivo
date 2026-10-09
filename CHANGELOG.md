@@ -1,3 +1,10 @@
+# [1.3.0](https://github.com/renova-art/arte-en-vivo/compare/v1.2.0...v1.3.0) (2026-10-09)
+
+
+### Features
+
+* reserva temprana por concepto, desglose de pagos, PDF en una página y firma ([e3e1769](https://github.com/renova-art/arte-en-vivo/commit/e3e1769b3f63c0c86d7f543c14b89764938db05a))
+
 # [1.2.0](https://github.com/renova-art/arte-en-vivo/compare/v1.1.0...v1.2.0) (2026-10-09)
 
 
