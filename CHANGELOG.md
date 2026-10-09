@@ -1,3 +1,10 @@
+# [1.2.0](https://github.com/renova-art/arte-en-vivo/compare/v1.1.0...v1.2.0) (2026-10-09)
+
+
+### Features
+
+* logo del PDF, reserva temprana, fechas bloqueadas y selector de fechas ([0a9803b](https://github.com/renova-art/arte-en-vivo/commit/0a9803bd92169d7f9b5379f1caf757fc1477982d))
+
 # [1.1.0](https://github.com/renova-art/arte-en-vivo/compare/v1.0.3...v1.1.0) (2026-10-09)
 
 
