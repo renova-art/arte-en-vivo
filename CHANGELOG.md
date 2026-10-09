@@ -1,3 +1,10 @@
+# [1.1.0](https://github.com/renova-art/arte-en-vivo/compare/v1.0.3...v1.1.0) (2026-10-09)
+
+
+### Features
+
+* edición completa de presupuestos, dos proveedoras y datos sensibles privados ([06359e1](https://github.com/renova-art/arte-en-vivo/commit/06359e1e648a5cce529a9823f4445de88e8f9e2a))
+
 ## [1.0.3](https://github.com/renova-art/arte-en-vivo/compare/v1.0.2...v1.0.3) (2026-10-09)
 
 
