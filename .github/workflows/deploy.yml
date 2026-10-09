@@ -28,7 +28,8 @@ jobs:
       - run: npm ci
       - name: Inject Firebase config
         if: ${{ env.FIREBASE_CONFIG != '' }}
-        run: node -e "require('fs').writeFileSync('src/environments/environment.ts','export const environment = { firebase: '+process.env.FIREBASE_CONFIG+' };\n')"
+        run: |
+          node -e "require('fs').writeFileSync('src/environments/environment.ts', 'export const environment = { firebase: ' + process.env.FIREBASE_CONFIG + ' };\n')"
       - run: npm run build -- --configuration production --base-href /${{ github.event.repository.name }}/
       - name: SPA fallback for Pages
         run: cp dist/arte-en-vivo/browser/index.html dist/arte-en-vivo/browser/404.html
