@@ -1,3 +1,10 @@
+# [1.4.0](https://github.com/renova-art/arte-en-vivo/compare/v1.3.0...v1.4.0) (2026-10-09)
+
+
+### Features
+
+* tarifas por tipo de evento, hora de inicio con plus de nocturnidad y exención de IVA ([40eea05](https://github.com/renova-art/arte-en-vivo/commit/40eea05d25d4864cc5e9d01285dc94080b38f17b))
+
 # [1.3.0](https://github.com/renova-art/arte-en-vivo/compare/v1.2.0...v1.3.0) (2026-10-09)
 
 
